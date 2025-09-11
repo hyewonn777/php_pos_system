@@ -1,0 +1,355 @@
+:root {
+    --bg: #f5f7fa;
+    --text: #111827;
+    --muted: #6b7280;
+    --card: #ffffff;
+    --border: #e5e7eb;
+    --brand: #1e3a8a;
+    --brand-2: #2563eb;
+    --hover: #eaf0ff;
+    --table-head: #1e3a8a;
+}
+
+/* Dark mode overrides */
+.dark {
+    --bg: #0f172a;
+    --text: #e5e7eb;
+    --muted: #a1a1aa;
+    --card: #111827;
+    --border: #1f2937;
+    --brand: #60a5fa;
+    --brand-2: #3b82f6;
+    --hover: #18213a;
+    --table-head: #334155;
+}
+
+* {
+    box-sizing: border-box
+}
+
+html, body {
+    height: 100%
+}
+
+body {
+    margin: 0;
+    font-family: system-ui, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+}
+
+/* Sidebar */
+.sidebar {
+    width: 240px;
+    background: var(--brand);
+    color: #fff;
+    height: 100vh;
+    position: fixed;
+    inset: 0 auto 0 0;
+    padding: 20px 16px;
+    box-shadow: 2px 0 8px rgba(0,0,0,.08);
+}
+
+    .sidebar h2 {
+        margin: 0 0 16px;
+        font-size: 20px;
+        letter-spacing: .5px;
+    }
+
+    .sidebar .brand-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px
+    }
+
+    .sidebar .dark-toggle {
+        background: #fff;
+        color: var(--brand);
+        border: none;
+        border-radius: 999px;
+        padding: 6px 10px;
+        cursor: pointer;
+        font-weight: 600;
+    }
+
+    .sidebar ul {
+        list-style: none;
+        margin: 16px 0 0;
+        padding: 0
+    }
+
+    .sidebar li {
+        margin: 4px 0
+    }
+
+    .sidebar a {
+        display: block;
+        padding: 12px 12px;
+        color: #fff;
+        text-decoration: none;
+        border-radius: 8px;
+        font-weight: 600;
+    }
+/* For logo */
+.logo {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+    .logo img {
+        width: 2px;
+        height: 2px;
+        object-fit: contain;
+        display: block;
+        margin: 0 auto;
+    }
+
+.sidebar h2 {
+    display: none; /* hide the "Admin Panel" text if the logo is enough */
+}
+
+        .sidebar a.active, .sidebar a:hover {
+            background: rgba(255,255,255,.15)
+        }
+
+/* Main */
+.content {
+    margin-left: 260px;
+    padding: 24px
+}
+
+/* Cards */
+.cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 8px
+}
+
+.card {
+    flex: 1 1 220px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+}
+
+    .card h3 {
+        margin: 0 0 8px;
+        font-size: 14px;
+        color: var(--muted)
+    }
+
+    .card .big {
+        font-size: 28px;
+        font-weight: 800
+    }
+
+/* Forms */
+form.inline-form {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 12px 0
+}
+
+input[type="text"], input[type="number"], input[type="date"], select, textarea {
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+input[type="file"] {
+    color: var(--text)
+}
+
+button, .btn {
+    background: var(--brand-2);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 14px;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+    button:hover, .btn:hover {
+        filter: brightness(1.1)
+    }
+
+.btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text)
+}
+
+.alert {
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin: 10px 0
+}
+
+.alert-success {
+    background: #dcfce7;
+    color: #065f46
+}
+
+.alert-error {
+    background: #fee2e2;
+    color: #991b1b
+}
+
+.dark .alert-success {
+    background: #064e3b;
+    color: #ecfdf5
+}
+
+.dark .alert-error {
+    background: #7f1d1d;
+    color: #fee2e2
+}
+
+/* Tables */
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+    .table th, .table td {
+        border-bottom: 1px solid var(--border);
+        padding: 12px;
+        text-align: left
+    }
+
+    .table th {
+        background: var(--table-head);
+        color: #fff
+    }
+
+/* Billing layout: 3 sections */
+.billing-layout {
+    display: flex;
+    gap: 16px
+}
+
+.billing-col {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px;
+    min-height: 60vh;
+}
+
+.category-list button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    margin: 6px 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+}
+
+    .category-list button.active, .category-list button:hover {
+        background: var(--hover)
+    }
+
+/* Item cards */
+.items-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill,minmax(160px,1fr));
+    gap: 12px
+}
+
+.item-card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--card);
+    cursor: pointer;
+    transition: transform .1s;
+}
+
+    .item-card:hover {
+        transform: translateY(-2px)
+    }
+
+    .item-card img {
+        width: 100%;
+        height: 120px;
+        object-fit: cover;
+        background: #eee
+    }
+
+    .item-card .meta {
+        padding: 10px
+    }
+
+    .item-card .name {
+        font-weight: 700
+    }
+
+    .item-card .price {
+        color: var(--muted);
+        font-size: 14px
+    }
+
+/* Bill table */
+.bill-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px
+}
+
+/* Login */
+.login-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: var(--bg)
+}
+
+.login-box {
+    width: 360px;
+    background: var(--card);
+    padding: 24px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.06)
+}
+
+    .login-box h2 {
+        margin: 0 0 12px;
+        color: var(--brand)
+    }
+
+    .login-box input {
+        width: 100%;
+        margin: 8px 0;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        color: var(--text)
+    }
+
+    .login-box button {
+        width: 100%;
+        margin-top: 8px
+    }
+
+    
