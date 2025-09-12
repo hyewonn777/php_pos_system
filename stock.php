@@ -364,10 +364,7 @@ if (isset($_POST['generate_template'])) {
     CSV columns required: <b>Category, Name, Price</b> (Image optional).
   </div>
 </div>
-
-
   <div style="margin-top:8px; font-size:13px; color:#666;">
-    CSV columns required: <b>Category, Name, Price</b> (Image optional).
   </div>
 </div>
 
