@@ -293,22 +293,25 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
     background: #3498db;
     color: white;
     font-weight: bold;
-}
+    }
     .edit-row { background:#fbfbfb; }
     .form-inline input[type="text"], .form-inline input[type="number"] { padding:6px; margin-right:6px; }
     .csv-tools { margin-top:12px; padding:12px; background:var(--card-bg); border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.05); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
     .small { font-size:13px; color:#666; margin-top:8px; }
     .topbar {
-    display: flex
-;
+    display: flex;
     justify-content: flex-end;
     margin-bottom: 20px;
+
 }
   </style>
 </head>
 <body>
   <div class="sidebar">
     <h2>Admin Panel</h2>
+    <div class="logo-box">
+        <img src="images/rsz_logo.png" alt="Logo">
+    </div>
     <ul>
       <li><a href="index.php">Dashboard</a></li>
       <li><a href="sales.php">Sales & Tracking</a></li>

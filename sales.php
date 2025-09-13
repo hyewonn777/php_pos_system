@@ -147,7 +147,7 @@ $result = $conn->query("SELECT * FROM sales ORDER BY sale_date DESC");
 
 <!-- Sales Table -->
 <table border="1" cellpadding="10">
-  <tr><th>Date 📆</th><th>Product 📦</th><th>Quantity 🏷️</th><th>Total 🟰</th><th>Action 🗳️</th></tr>
+  <tr><th>Date 📆</th><th>Product 📦</th><th>Quantity 🏷️</th><th>Total 💳</th><th>Action 🗳️</th></tr>
   <?php while ($row = $result->fetch_assoc()): ?>
     <tr>
       <td><?= htmlspecialchars($row['sale_date']) ?></td>

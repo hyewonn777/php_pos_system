@@ -352,4 +352,156 @@ button, .btn {
         margin-top: 8px
     }
 
-    
+    /* Background */
+body {
+  margin: 0;
+  font-family: 'Poppins', sans-serif;
+  display: flex;
+  min-height: 100vh;
+}
+
+.bg-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: url("bg.gif") no-repeat center center fixed;
+  background-size: cover;
+  z-index: -1;
+  filter: brightness(0.5);
+}
+
+/* Sidebar */
+.sidebar {
+  width: 220px;
+  background: rgba(255,255,255,0.9);
+  padding: 20px;
+  box-shadow: 2px 0 10px rgba(0,0,0,0.2);
+  position: fixed;
+  top: 0; bottom: 0; left: 0;
+}
+
+.sidebar h2 {
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.sidebar nav a {
+  display: block;
+  margin: 12px 0;
+  text-decoration: none;
+  color: #333;
+  padding: 10px;
+  border-radius: 8px;
+  transition: background 0.3s;
+}
+
+.sidebar nav a:hover {
+  background: #f0f0f0;
+}
+
+/* Main Content */
+.main-content {
+  margin-left: 240px;
+  padding: 20px;
+  flex: 1;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+}
+
+.search-bar {
+  width: 250px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+}
+
+/* Cards */
+.dashboard-card {
+  background: rgba(255,255,255,0.95);
+  border-radius: 15px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.logo-box {
+    display: flex;
+    justify-content: center; /* Center horizontally */
+    align-items: center; /* Center vertically */
+    padding: 20px 0;
+}
+
+    .logo-box img {
+        max-width: 70px; /* Adjust size */
+        max-height: 70px;
+        width: auto;
+        height: auto;
+        border-radius: 50%;
+        object-fit: contain;
+        animation: fadeInDown 1s ease-in-out;
+    }
+
+.sidebar button {
+    width: 100%;
+    padding: 10px;
+    border-radius: 6px;
+    border: none;
+    background: #e74c3c;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    transition: 0.3s ease-in-out;
+    box-shadow: 0 0 8px rgba(0,0,0,0.2);
+}
+
+    .sidebar button:hover {
+        background: #ff4d4d;
+        box-shadow: 0 0 15px rgba(255, 0, 0, 0.8); /* Glow effect */
+        transform: scale(1.05); /* Slight zoom */
+    }
+
+body {
+    animation: fadeIn 0.8s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Fix table header colors for dark/light mode */
+table th {
+    background-color: var(--card-bg, #1e293b); /* Dark background */
+    color: #fff;
+    padding: 10px;
+    text-align: left;
+}
+
+body.light-mode table th {
+    background-color: #f1f5f9; /* Light mode */
+    color: #111;
+}
