@@ -1,15 +1,17 @@
-﻿    <?php
+﻿<?php
 require 'auth.php';
 require 'db.php';
-
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+/* ------------------------
+   Handle Form Submissions
+------------------------ */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // --- Delete appointment ---
-    if (isset($_POST['delete_id'])) {
+    if (!empty($_POST['delete_id'])) {
         $delete_id = intval($_POST['delete_id']);
         $stmt = $conn->prepare("DELETE FROM appointments WHERE id = ?");
         if ($stmt) {
@@ -26,13 +28,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($_POST['edit_id'])) {
         $id       = intval($_POST['edit_id']);
         $customer = trim($_POST['customer']);
-        $service  = trim($_POST['service']);
         $date     = $_POST['date'];
+        $start    = $_POST['start_time'];
+        $end      = $_POST['end_time'];
+        $location = trim($_POST['location']);
         $status   = $_POST['status'];
 
-        $stmt = $conn->prepare("UPDATE appointments SET customer=?, service=?, `date`=?, status=? WHERE id=?");
+        $stmt = $conn->prepare("UPDATE appointments 
+            SET customer=?, date=?, start_time=?, end_time=?, location=?, status=? 
+            WHERE id=?");
         if ($stmt) {
-            $stmt->bind_param("ssssi", $customer, $service, $date, $status, $id);
+            $stmt->bind_param("ssssssi", $customer, $date, $start, $end, $location, $status, $id);
             $stmt->execute();
             $stmt->close();
             $_SESSION['flash'] = "Appointment updated.";
@@ -42,15 +48,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // --- Add appointment ---
-    if (!empty($_POST['customer']) && !empty($_POST['service']) && !empty($_POST['date']) && !empty($_POST['status'])) {
+    if (!empty($_POST['customer']) && !empty($_POST['date']) && !empty($_POST['start_time']) && !empty($_POST['end_time']) && !empty($_POST['status'])) {
         $customer = trim($_POST['customer']);
-        $service  = trim($_POST['service']);
         $date     = $_POST['date'];
+        $start    = $_POST['start_time'];
+        $end      = $_POST['end_time'];
+        $location = trim($_POST['location']);
         $status   = $_POST['status'];
 
-        $stmt = $conn->prepare("INSERT INTO appointments (customer, service, `date`, status, created_at) VALUES (?, ?, ?, ?, NOW())");
+        $stmt = $conn->prepare("INSERT INTO appointments 
+            (customer, service, date, start_time, end_time, location, status, created_at) 
+            VALUES (?, 'Photography', ?, ?, ?, ?, ?, NOW())");
         if ($stmt) {
-            $stmt->bind_param("ssss", $customer, $service, $date, $status);
+            $stmt->bind_param("ssssss", $customer, $date, $start, $end, $location, $status);
             $stmt->execute();
             $stmt->close();
             $_SESSION['flash'] = "Appointment added.";
@@ -64,20 +74,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 
-// --- Fetch events for calendar ---
+/* ------------------------
+   Auto-Cancel Expired
+------------------------ */
+$conn->query("UPDATE appointments 
+    SET status='Cancelled' 
+    WHERE CONCAT(date,' ',end_time) < NOW() 
+    AND status!='Cancelled'");
+
+/* ------------------------
+   Fetch Events for Calendar
+------------------------ */
 $events = [];
 $res = $conn->query("SELECT * FROM appointments");
 while ($row = $res->fetch_assoc()) {
-
     $color = "#3498db"; // default
-    if ($row['status'] === "vacant")   $color = "#2ecc71"; // green
-    if ($row['status'] === "occupied") $color = "#e74c3c"; // red
-    if ($row['status'] === "pending")  $color = "#f1c40f"; // yellow
+    if ($row['status'] === "Vacant")   $color = "#2ecc71";
+    if ($row['status'] === "Approved") $color = "#2ecc71";
+    if ($row['status'] === "Cancelled") $color = "#e74c3c";
+    if ($row['status'] === "Pending")  $color = "#f1c40f";
 
     $events[] = [
         "id"    => $row['id'],
         "title" => $row['customer'] . " (" . $row['service'] . ")",
-        "start" => $row['date'],
+        "start" => $row['date'] . "T" . $row['start_time'],
+        "end"   => $row['date'] . "T" . $row['end_time'],
         "color" => $color
     ];
 }
@@ -101,16 +122,35 @@ $events_json = json_encode($events);
     .sidebar ul li{margin:15px 0;}
     .sidebar ul li a{color:var(--sidebar-text);text-decoration:none;}
     .sidebar ul li a:hover{text-decoration:underline;}
-    .logout{text-align:center;margin-top:auto;}
-    .logout button{width:100%;padding:8px;border:none;border-radius:5px;background:#e74c3c;color:white;font-weight:bold;cursor:pointer;}
-    .logout button:hover{background:#c0392b;}
+    .logout button {
+      width: 100%; padding: 8px; border: none; border-radius: 5px;
+      background: #e74c3c; color: white; font-weight: bold; cursor: pointer;
+    }
+    .logout button:hover { background: #c0392b; }
+    button.toggle-btn {
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 5px;
+    border: none;
+    background: #3498db;
+    color: white;
+    font-weight: bold;
+    }
+    button, .btn {
+    background: var(--brand-2);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 14px;
+    cursor: pointer;
+    font-weight: 700;
+    }
     .content{flex:1;padding:20px;}
     .topbar{display:flex;justify-content:flex-end;margin-bottom:20px;}
     .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin-top:20px;}
     .card{background:var(--card-bg);padding:20px;border-radius:10px;box-shadow:0 4px 10px rgba(0,0,0,0.1);text-align:center;font-size:18px;font-weight:bold;transition:transform 0.2s ease;cursor:pointer;}
     .card:hover{transform:translateY(-3px);}
-    button.toggle-btn{cursor:pointer;padding:8px 12px;border-radius:5px;border:none;background:#3498db;color:white;font-weight:bold;}
-    button.toggle-btn:hover{background:#2980b9;}
+    #searchBar{width:100%;padding:10px;margin:15px 0;border:1px solid #ccc;border-radius:6px;}
     #appointmentForm{display:none;margin-top:20px;padding:20px;background:var(--card-bg);border-radius:10px;box-shadow:0 4px 10px rgba(0,0,0,0.1);}
     #appointmentForm input,#appointmentForm select{display:block;margin:10px 0;padding:8px;width:100%;border:1px solid #ccc;border-radius:5px;}
     #appointmentForm button{padding:10px 15px;background:#27ae60;color:white;border:none;border-radius:5px;cursor:pointer;}
@@ -138,15 +178,12 @@ $events_json = json_encode($events);
     </div>
   </div>
 
-    <div class="content">
+  <div class="content">
     <div class="topbar">
-    <div id="clock" style="margin-right:auto; font-weight:bold; font-size:16px;"></div>
-    <button class="toggle-btn" onclick="toggleTheme()">🌙 Toggle Dark Mode</button>
-   </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <h1>Appointments / Booking</h1>
-
+      <div id="clock" style="margin-right:auto; font-weight:bold; font-size:16px;"></div>
+      <button class="toggle-btn" onclick="toggleTheme()">🌙 Toggle Dark Mode</button>
     </div>
+    <h1>Appointments / Booking</h1>
     <p>Manage client bookings below.</p>
 
     <div class="cards">
@@ -156,6 +193,9 @@ $events_json = json_encode($events);
       </div>
     </div>
 
+    <!-- Search -->
+    <input type="text" id="searchBar" placeholder="🔍 Search appointments...">
+
     <!-- Calendar -->
     <div id="calendar"></div>
 
@@ -163,16 +203,15 @@ $events_json = json_encode($events);
     <form id="appointmentForm" method="POST">
       <h3>New Appointment</h3>
       <input type="text" name="customer" placeholder="Customer Name" required>
-      <select name="service" required>
-        <option value="">-- Select Service --</option>
-        <option value="Photography">Photography</option>
-        <option value="Videography">Videography</option>
-      </select>
       <input type="date" name="date" required>
+      <label>Start Time:</label>
+      <input type="time" name="start_time" required>
+      <label>End Time:</label>
+      <input type="time" name="end_time" required>
+      <input type="text" name="location" placeholder="Location" required>
       <select name="status" required>
-        <option value="vacant">Vacant</option>
-        <option value="occupied">Occupied</option>
-        <option value="pending">Pending</option>
+        <option value="Pending">Pending</option>
+        <option value="Approved">Approved</option>
       </select>
       <button type="submit">Add Appointment</button>
     </form>
@@ -181,13 +220,15 @@ $events_json = json_encode($events);
     <table>
       <thead>
         <tr>
-          <th>ID</th>
-          <th>Customer</th>
-          <th>Service</th>
-          <th>Date</th>
-          <th>Status</th>
-          <th>Created</th>
-          <th>Actions</th>
+          <th>ID 🪪</th>
+          <th>Customer 👥</th>
+          <th>Date 📆</th>
+          <th>Start 🟢</th>
+          <th>Finish 🔴</th>
+          <th>Location 📍</th>
+          <th>Status 📖</th>
+          <th>Created at 🕖</th>
+          <th>Actions 🗳️</th>
         </tr>
       </thead>
       <tbody>
@@ -198,8 +239,10 @@ $events_json = json_encode($events);
         <tr>
           <td><?= intval($row['id']) ?></td>
           <td><?= htmlspecialchars($row['customer']) ?></td>
-          <td><?= htmlspecialchars($row['service']) ?></td>
           <td><?= htmlspecialchars($row['date']) ?></td>
+          <td><?= htmlspecialchars($row['start_time']) ?></td>
+          <td><?= htmlspecialchars($row['end_time']) ?></td>
+          <td><?= htmlspecialchars($row['location']) ?></td>
           <td><?= htmlspecialchars($row['status']) ?></td>
           <td><?= htmlspecialchars($row['created_at']) ?></td>
           <td>
@@ -207,22 +250,21 @@ $events_json = json_encode($events);
             <form method="POST" style="display:inline;">
               <input type="hidden" name="edit_id" value="<?= intval($row['id']) ?>">
               <input type="text" name="customer" value="<?= htmlspecialchars($row['customer']) ?>" required>
-              <select name="service" required>
-                <option <?= $row['service']=="Photography"?"selected":"" ?> value="Photography">Photography</option>
-                <option <?= $row['service']=="Videography"?"selected":"" ?> value="Videography">Videography</option>
-              </select>
               <input type="date" name="date" value="<?= htmlspecialchars($row['date']) ?>" required>
+              <input type="time" name="start_time" value="<?= htmlspecialchars($row['start_time']) ?>" required>
+              <input type="time" name="end_time" value="<?= htmlspecialchars($row['end_time']) ?>" required>
+              <input type="text" name="location" value="<?= htmlspecialchars($row['location']) ?>" required>
               <select name="status" required>
-                <option <?= $row['status']=="vacant"?"selected":"" ?> value="vacant">Vacant</option>
-                <option <?= $row['status']=="occupied"?"selected":"" ?> value="occupied">Occupied</option>
-                <option <?= $row['status']=="pending"?"selected":"" ?> value="pending">Pending</option>
+                <option <?= $row['status']=="Pending"?"selected":"" ?> value="Pending">Pending</option>
+                <option <?= $row['status']=="Approved"?"selected":"" ?> value="Approved">Approved</option>
+                <option <?= $row['status']=="Cancelled"?"selected":"" ?> value="Cancelled">Cancelled</option>
               </select>
-              <button type="submit" style="background:#27ae60;color:white;border:none;padding:6px 12px;border-radius:5px;cursor:pointer;">💾 Save</button>
+              <button type="submit">💾 Save</button>
             </form>
             <!-- Delete -->
             <form method="POST" style="display:inline;" onsubmit="return confirm('Delete this appointment?');">
               <input type="hidden" name="delete_id" value="<?= intval($row['id']) ?>">
-              <button type="submit" style="background:#e74c3c;color:white;border:none;padding:6px 12px;border-radius:5px;cursor:pointer;">🗑 Delete</button>
+              <button type="submit">🗑️ Delete</button>
             </form>
           </td>
         </tr>
@@ -242,6 +284,16 @@ $events_json = json_encode($events);
     }
     if(localStorage.getItem("theme")==="dark"){document.body.classList.add("dark");}
 
+    // Search filter
+    document.getElementById("searchBar").addEventListener("keyup", function(){
+      let filter = this.value.toLowerCase();
+      let rows = document.querySelectorAll("table tbody tr");
+      rows.forEach(r=>{
+        let text = r.innerText.toLowerCase();
+        r.style.display = text.includes(filter) ? "" : "none";
+      });
+    });
+
     // FullCalendar init
     document.addEventListener('DOMContentLoaded', function() {
       var calendarEl = document.getElementById('calendar');
@@ -257,18 +309,16 @@ $events_json = json_encode($events);
       });
       calendar.render();
     });
-  </script>
 
-  <script>
+    // Live Clock
     function updateClock() {
       const now = new Date();
       document.getElementById("clock").innerText =
-    now.toLocaleDateString() + " " + now.toLocaleTimeString();
+        now.toLocaleDateString() + " " + now.toLocaleTimeString();
     }
     setInterval(updateClock, 1000);
-      updateClock();
-   </script>
-
+    updateClock();
+  </script>
 
   <?php
   if (!empty($_SESSION['flash'])) {

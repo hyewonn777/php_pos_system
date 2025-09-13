@@ -128,7 +128,7 @@ $upcomingAppointments = getCount($conn, "SELECT COUNT(*) AS cnt FROM bookings WH
     }
     setInterval(updateClock, 1000);
       updateClock();
-   </script>
+  </script>
 
 </body>
 </html>

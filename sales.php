@@ -46,13 +46,9 @@ if (isset($_POST['delete_sale'])) {
     header("Location: sales.php");
     exit;
 }
-
 // READ
 $result = $conn->query("SELECT * FROM sales ORDER BY sale_date DESC");
 ?>
-
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -151,7 +147,7 @@ $result = $conn->query("SELECT * FROM sales ORDER BY sale_date DESC");
 
 <!-- Sales Table -->
 <table border="1" cellpadding="10">
-  <tr><th>Date</th><th>Product</th><th>Qty</th><th>Total</th><th>Action</th></tr>
+  <tr><th>Date 📆</th><th>Product 📦</th><th>Quantity 🏷️</th><th>Total 🟰</th><th>Action 🗳️</th></tr>
   <?php while ($row = $result->fetch_assoc()): ?>
     <tr>
       <td><?= htmlspecialchars($row['sale_date']) ?></td>
@@ -166,13 +162,13 @@ $result = $conn->query("SELECT * FROM sales ORDER BY sale_date DESC");
           <input type="text" name="product" value="<?= $row['product'] ?>" required>
           <input type="number" name="quantity" value="<?= $row['quantity'] ?>" required>
           <input type="number" step="0.01" name="total" value="<?= $row['total'] ?>" required>
-          <button type="submit" name="update_sale">Update</button>
+          <button type="submit" name="update_sale">Save 💾</button>
         </form>
 
         <!-- Delete -->
         <form method="POST" style="display:inline;">
           <input type="hidden" name="id" value="<?= $row['id'] ?>">
-          <button type="submit" name="delete_sale" onclick="return confirm('Delete this sale?');">Delete</button>
+          <button type="submit" name="delete_sale" onclick="return confirm('Are you sure you want to delete this sale?');">Delete 🗑️</button>
         </form>
       </td>
     </tr>
