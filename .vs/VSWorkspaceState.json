@@ -1,8 +1,9 @@
 {
   "ExpandedNodes": [
     "",
-    "\\css"
+    "\\css",
+    "\\uploads"
   ],
-  "SelectedNode": "\\stock.php",
+  "SelectedNode": "\\orders.php",
   "PreviewInSolutionExplorer": false
 }

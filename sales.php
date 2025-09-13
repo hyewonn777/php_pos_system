@@ -115,6 +115,9 @@ $result = $conn->query("SELECT * FROM sales ORDER BY sale_date DESC");
 
   <div class="sidebar">
     <h2>Admin Panel</h2>
+    <div class="logo-box">
+        <img src="images/rsz_logo.png" alt="Logo">
+    </div>
     <ul>
       <li><a href="index.php">Dashboard</a></li>
       <li><a href="sales.php">Sales & Tracking</a></li>
