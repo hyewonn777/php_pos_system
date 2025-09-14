@@ -373,7 +373,6 @@ body {
 /* Sidebar */
 .sidebar {
   width: 220px;
-  background: rgba(255,255,255,0.9);
   padding: 20px;
   box-shadow: 2px 0 10px rgba(0,0,0,0.2);
   position: fixed;
@@ -407,10 +406,9 @@ body {
 }
 
 .topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 25px;
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 20px;
 }
 
 .search-bar {
@@ -437,11 +435,10 @@ body {
 }
 
     .logo-box img {
-        max-width: 70px; /* Adjust size */
-        max-height: 70px;
+        max-width: 100px; /* Adjust size */
+        max-height: 100px;
         width: auto;
         height: auto;
-        border-radius: 50%;
         object-fit: contain;
         animation: fadeInDown 1s ease-in-out;
     }
@@ -491,17 +488,4 @@ body {
         opacity: 1;
         transform: translateY(0);
     }
-}
-
-/* Fix table header colors for dark/light mode */
-table th {
-    background-color: var(--card-bg, #1e293b); /* Dark background */
-    color: #fff;
-    padding: 10px;
-    text-align: left;
-}
-
-body.light-mode table th {
-    background-color: #f1f5f9; /* Light mode */
-    color: #111;
 }
