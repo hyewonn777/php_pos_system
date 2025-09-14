@@ -3,24 +3,28 @@
   "WorkspaceRootPath": "C:\\xampp\\htdocs\\pos\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\orders.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:orders.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\appointment.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:appointment.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\sales.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:sales.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\index.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:index.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\orders.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:orders.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\stock.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:stock.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\css\\admin.css||{A5401142-F49D-43DB-90B1-F57BA349E55C}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:css\\admin.css||{A5401142-F49D-43DB-90B1-F57BA349E55C}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\login.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:login.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\index.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:index.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
     }
   ],
   "DocumentGroupContainers": [
@@ -30,72 +34,80 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 0,
+          "SelectedChildIndex": 3,
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 4,
+              "Title": "login.php",
+              "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\login.php",
+              "RelativeDocumentMoniker": "login.php",
+              "ToolTip": "C:\\xampp\\htdocs\\pos\\login.php",
+              "RelativeToolTip": "login.php",
+              "ViewState": "AgIAABUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-09-14T03:25:12.253Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "admin.css",
+              "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\css\\admin.css",
+              "RelativeDocumentMoniker": "css\\admin.css",
+              "ToolTip": "C:\\xampp\\htdocs\\pos\\css\\admin.css",
+              "RelativeToolTip": "css\\admin.css",
+              "ViewState": "AgIAAGABAAAAAAAAAAAAAJkBAAAeAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003000|",
+              "WhenOpened": "2025-09-14T01:06:06.966Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
               "Title": "orders.php",
               "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\orders.php",
               "RelativeDocumentMoniker": "orders.php",
               "ToolTip": "C:\\xampp\\htdocs\\pos\\orders.php",
               "RelativeToolTip": "orders.php",
-              "ViewState": "AgIAADYAAAAAAAAAAAAAAEMAAAAKAAAAAAAAAA==",
+              "ViewState": "AgIAABIAAAAAAAAAAAAAAFMAAAAFAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-13T14:46:05.409Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-09-13T14:46:05.409Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
-              "Title": "appointment.php",
-              "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\appointment.php",
-              "RelativeDocumentMoniker": "appointment.php",
-              "ToolTip": "C:\\xampp\\htdocs\\pos\\appointment.php",
-              "RelativeToolTip": "appointment.php",
-              "ViewState": "AgIAAJAAAAAAAAAAAAAAAKgAAAAKAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-13T14:45:51.37Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 0,
               "Title": "sales.php",
               "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\sales.php",
               "RelativeDocumentMoniker": "sales.php",
               "ToolTip": "C:\\xampp\\htdocs\\pos\\sales.php",
               "RelativeToolTip": "sales.php",
-              "ViewState": "AgIAAGMAAAAAAAAAAAAAAHcAAAAKAAAAAAAAAA==",
+              "ViewState": "AgIAAGIAAAAAAAAAAAAnwHAAAAAWAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
               "WhenOpened": "2025-09-13T14:45:38.986Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 5,
               "Title": "index.php",
               "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\index.php",
               "RelativeDocumentMoniker": "index.php",
               "ToolTip": "C:\\xampp\\htdocs\\pos\\index.php",
               "RelativeToolTip": "index.php",
-              "ViewState": "AgIAAE4AAAAAAAAAAAAAAFcAAAAKAAAAAAAAAA==",
+              "ViewState": "AgIAAGMAAAAAAAAAAAAAAD0AAABOAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-13T14:45:17.922Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-09-13T14:45:17.922Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 2,
               "Title": "stock.php",
               "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\stock.php",
               "RelativeDocumentMoniker": "stock.php",
               "ToolTip": "C:\\xampp\\htdocs\\pos\\stock.php",
               "RelativeToolTip": "stock.php",
-              "ViewState": "AgIAACwBAAAAAAAAAAAAADcBAAAEAAAAAAAAAA==",
+              "ViewState": "AgIAAA4BAAAAAAAAAAAAABcBAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-13T13:43:59.333Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-09-13T13:43:59.333Z"
             }
           ]
         }

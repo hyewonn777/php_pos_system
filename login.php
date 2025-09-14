@@ -145,14 +145,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     input[type="text"], input[type="password"]{
       width:100%;
-      height:46px;
+      height:30px;
       padding:10px 12px;
       border-radius:10px;
       border:none;
       outline:none;
       background: var(--glass);
       color:var(--text);
-      font-size:15px;
+      font-size:16px;
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
     }
     input::placeholder { color: rgba(255,255,255,0.6); }

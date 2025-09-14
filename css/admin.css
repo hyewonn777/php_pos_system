@@ -440,7 +440,6 @@ body {
         width: auto;
         height: auto;
         object-fit: contain;
-        animation: fadeInDown 1s ease-in-out;
     }
 
 .sidebar button {

@@ -169,7 +169,7 @@ $performance = $totalRevenue > 5000 ? "Excellent 🚀" : ($totalRevenue > 1000 ?
       <li><a href="orders.php">Order Tracking</a></li>
     </ul>
     <div class="logout">
-      <form action="logout.php" method="POST"><button type="submit">🚪 Logout</button></form>
+      <form action="logout.php" method="POST"><button type="submit">Logout 🚪</button></form>
     </div>
   </div>
 
