@@ -36,4 +36,4 @@ This project is designed for Marcomedia in order to manage  their **products, sa
 
 1. Clone this repo or download as ZIP:
    ```bash
-   git clone https://github.com/your-username/pos-system.git
+   git clone https://github.com/hyewonn777/php_pos_system
