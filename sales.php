@@ -85,47 +85,85 @@ $performance = $totalRevenue > 5000 ? "Excellent 🚀" : ($totalRevenue > 1000 ?
   <title>Sales & Tracking</title>
   <link rel="stylesheet" href="css/admin.css?v=2">
   <style>
-    .logo-box { text-align: center; margin-bottom: 20px; }
-    .logo-box img { width: 100px; height: auto; }
+
+    .logo-box {
+      text-align: center; margin-bottom: 20px; 
+    }
+
+    .logo-box img {
+      width: 100px; height: auto; 
+    }
 
     .logout button {
       width: 100%; padding: 10px; border: none; border-radius: 5px;
       background: #e74c3c; color: white; font-weight: bold; cursor: pointer;
       box-shadow: 0 0 10px rgba(231,76,60,0.7); transition: 0.3s;
     }
-    .logout button:hover { background: #c0392b; box-shadow: 0 0 20px rgba(231,76,60,1); }
+
+    .logout button:hover { 
+      background: #c0392b; box-shadow: 0 0 20px rgba(231,76,60,1); 
+    }
 
     /* Clock Glow */
-    #clock { font-weight: bold; font-size: 16px; transition: 0.3s; }
-    .dark #clock { color: #0ff; text-shadow: 0 0 10px #00f, 0 0 20px #0ff, 0 0 30px #0ff; }
+    #clock { 
+      font-weight: bold; font-size: 16px; transition: 0.3s; 
+    }
+
+    .dark #clock { 
+      color: #0ff; text-shadow: 0 0 10px #00f, 0 0 20px #0ff, 0 0 30px #0ff; 
+    }
 
     /* Dark Mode Toggle */
     .toggle-btn {
       padding: 8px 14px; border: none; border-radius: 5px;
       cursor: pointer; font-weight: bold; transition: 0.3s;
     }
-    .dark .toggle-btn { background: #2c3e50; color: #0ff; box-shadow: 0 0 10px #00f, 0 0 20px #0ff; }
+
+    .dark .toggle-btn { 
+      background: #2c3e50; color: #0ff; box-shadow: 0 0 10px #00f, 0 0 20px #0ff; 
+    }
 
     /* Sales Table */
-    #salesTable { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; }
+    #salesTable { 
+      width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; 
+    }
+
     #salesTable th, #salesTable td {
       border: 1px solid #e3e3e3; padding: 12px 16px;
       text-align: left; vertical-align: middle; word-wrap: break-word;
     }
-    #salesTable th { background: #f4f4f4; font-weight: bold; }
-    .dark #salesTable th { background: #333; }
+
+    #salesTable th { 
+      background: #f4f4f4; font-weight: bold; 
+    }
+
+    .dark #salesTable th { 
+      background: #333; 
+    }
 
     /* Edit Row */
-    .edit-row td { background: #fafafa; padding: 12px 16px; }
-    .dark .edit-row td { background: #2c2c2c; }
+    .edit-row td { 
+      background: #fafafa; padding: 12px 16px; 
+    }
+
+    .dark .edit-row td { 
+      background: #2c2c2c; 
+    }
+
     .edit-row form {
       display: grid; grid-template-columns: repeat(5, 1fr) auto auto;
       gap: 10px; align-items: center;
     }
-    .edit-row input, .edit-row button { width: 100%; padding: 8px; box-sizing: border-box; }
+
+    .edit-row input, .edit-row button { 
+      width: 100%; padding: 8px; box-sizing: border-box; 
+    }
 
     /* Summary Cards */
-    .summary { display: flex; gap: 20px; margin: 20px 0; }
+    .summary { 
+      display: flex; gap: 20px; margin: 20px 0; 
+    }
+
     .summary .card {
       flex: 1; padding: 20px; border-radius: 10px;
       text-align: center; background: var(--card-bg);
@@ -136,24 +174,44 @@ $performance = $totalRevenue > 5000 ? "Excellent 🚀" : ($totalRevenue > 1000 ?
       width: 220px; background: var(--sidebar-bg); color: var(--sidebar-text);
       height: 100vh; padding: 20px; display: flex; flex-direction: column;
     }
-    .sidebar h2 { text-align: center; margin-bottom: 20px; }
-    .sidebar ul { list-style: none; padding: 0; flex: 1; }
-    .sidebar ul li { margin: 15px 0; }
-    .sidebar ul li a { color: var(--sidebar-text); text-decoration: none; }
-    .sidebar ul li a:hover { text-decoration: underline; }
 
-    .topbar { display: flex; justify-content: flex-end; margin-bottom: 20px; }
+    .sidebar h2 { 
+      text-align: center; margin-bottom: 20px; 
+    }
+
+    .sidebar ul { 
+      list-style: none; padding: 0; flex: 1; 
+    }
+
+    .sidebar ul li {
+      margin: 15px 0; 
+    }
+
+    .sidebar ul li a { 
+      color: var(--sidebar-text); text-decoration: none; 
+    }
+
+    .sidebar ul li a:hover { 
+      text-decoration: underline; 
+    }
+
+    .topbar { 
+      display: flex; justify-content: flex-end; margin-bottom: 20px; 
+    }
 
     :root {
       --bg: #f9f9f9; --text: #222;
       --card-bg: #fff; --sidebar-bg: #2c3e50; --sidebar-text: #ecf0f1;
     }
+
     .dark {
       --bg: #1e1e1e; --text: #f5f5f5;
       --card-bg: #2c2c2c; --sidebar-bg: #111; --sidebar-text: #bbb;
     }
 
-    .search-bar { margin: 10px 0; }
+    .search-bar { 
+      margin: 10px 0; 
+    }
   </style>
 </head>
 <body>
