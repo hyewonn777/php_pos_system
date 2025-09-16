@@ -376,10 +376,12 @@ $events_json = json_encode($events);
       <h3>New Appointment</h3>
       <input type="text" name="customer" placeholder="Customer Name" required>
       <input type="date" name="date" required>
+
       <label>Start Time:</label>
       <input type="time" name="start_time" required>
       <label>End Time:</label>
       <input type="time" name="end_time" required>
+
       <input type="text" name="location" placeholder="Location" required>
       <select name="status" required>
         <option value="Pending">Pending</option>
@@ -429,7 +431,7 @@ $events_json = json_encode($events);
               <select name="status" required>
                 <option <?= $row['status']=="Pending"?"selected":"" ?> value="Pending">Pending</option>
                 <option <?= $row['status']=="Approved"?"selected":"" ?> value="Approved">Approved</option>
-                <option <?= $row['status']=="Cancelled"?"selected":"" ?> value="Cancelled">Cancelled</option>
+                <option <?= $row['status']=="Cancelled"?"selected":"" ?> value="Cancelled">Cancelled / Expired</option>
               </select>
               <button type="submit">💾 Save</button>
             </form>

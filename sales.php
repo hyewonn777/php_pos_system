@@ -325,7 +325,6 @@ $performance = $totalRevenue > 5000 ? "Excellent 🚀" : ($totalRevenue > 1000 ?
       <div class="card"><b>💰 Total Sales: </b><?= number_format($totalSales, 2) ?></div>
       <div class="card"><b>📈 Revenue: </b><?= number_format($totalRevenue, 2) ?></div>
     </div>
-    <p><b><?= $transactions ?> Transactions</b> | Performance Status: <b><?= $performance ?></b></p>
 
     <!-- Admin Manual Override -->
     <form method="POST" style="margin-bottom:20px;">
