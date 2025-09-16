@@ -12,6 +12,7 @@
       --sidebar-bg: #2c3e50;
       --sidebar-text: #ecf0f1;
     }
+
     .dark {
       --bg: #1e1e1e;
       --text: #f5f5f5;
@@ -19,55 +20,114 @@
       --sidebar-bg: #111;
       --sidebar-text: #bbb;
     }
-    body {
-      margin: 0; font-family: Arial, sans-serif;
-      background: var(--bg); color: var(--text);
-      display: flex; transition: all 0.3s ease;
-    }
-    .sidebar {
-      width: 220px; background: var(--sidebar-bg); color: var(--sidebar-text);
-      height: 100vh; padding: 20px; display: flex; flex-direction: column;
-    }
-    .sidebar h2 { text-align: center; margin-bottom: 20px; }
-    .sidebar ul { list-style: none; padding: 0; flex: 1; }
-    .sidebar ul li { margin: 15px 0; }
-    .sidebar ul li a { color: var(--sidebar-text); text-decoration: none; }
-    .sidebar ul li a:hover { text-decoration: underline; }
-    .logout { text-align: center; margin-top: auto; }
-    .logout button {
-      width: 100%; padding: 8px; border: none; border-radius: 5px;
-      background: #e74c3c; color: white; font-weight: bold; cursor: pointer;
-    }
-    .logout button:hover { background: #c0392b; }
 
-    .content { flex: 1; padding: 20px; }
-    .topbar { display: flex; justify-content: flex-end; margin-bottom: 20px; }
-    .cards {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 20px; margin-top: 20px;
+    body {
+      margin: 0; 
+      font-family: Arial, sans-serif;
+      background: var(--bg); 
+      color: var(--text);
+      display: flex; 
+      transition: all 0.3s ease;
     }
+
+    .sidebar {
+      width: 220px; 
+      background: var(--sidebar-bg); 
+      color: var(--sidebar-text);
+      height: 100vh; 
+      padding: 20px; 
+      display: flex; 
+      flex-direction: column;
+    }
+
+    .sidebar { 
+      width:220px; 
+      background:var(--sidebar-bg); 
+      color:var(--sidebar-text); 
+      height:100vh; 
+      padding:20px; 
+      display:flex; 
+      flex-direction:column; 
+    }
+    
+    .sidebar h2 { 
+      text-align:center; 
+      margin-bottom:20px; 
+    }
+    
+    .sidebar ul { 
+      list-style:none; 
+      padding:0; flex:1; 
+    }
+    
+    .sidebar ul li { 
+      margin:15px 0; 
+    }
+    
+    .sidebar ul li a { 
+      color:var(--sidebar-text); 
+      text-decoration:none; 
+    }
+    
+    .content { 
+      flex:1; 
+      padding:20px; 
+    }
+    
+    .topbar { 
+      display:flex; 
+      justify-content:flex-end; 
+      margin-bottom:20px; 
+    }
+
+    .cards {
+      display: grid; 
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px; 
+      margin-top: 20px;
+    }
+
     .card {
-      background: var(--card-bg); padding: 20px; border-radius: 10px;
+      background: var(--card-bg); 
+      padding: 20px; 
+      border-radius: 10px;
       box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-      text-align: center; font-size: 18px; font-weight: bold;
+      text-align: center; 
+      font-size: 18px; 
+      font-weight: bold;
       transition: transform 0.2s ease;
     }
-    .card:hover { transform: translateY(-3px); }
-    button.toggle-btn {
-      cursor: pointer; padding: 8px 12px; border-radius: 5px;
-      border: none; background: #3498db; color: white; font-weight: bold;
+
+    .card:hover { 
+      transform: translateY(-3px); 
     }
-    button.toggle-btn:hover { background: #2980b9; }
+
+    button.toggle-btn {
+      cursor: pointer; 
+      padding: 8px 12px; 
+      border-radius: 5px;
+      border: none; 
+      background: #3498db; 
+      color: white; 
+      font-weight: bold;
+    }
+
+    button.toggle-btn:hover { 
+        background: #2980b9; 
+    }
+
     /* Clock Glow */
     #clock {
       font-weight: bold;
       font-size: 16px;
       transition: 0.3s;
     }
+
     .dark #clock {
       color: #0ff;
       text-shadow: 0 0 10px #00f, 0 0 20px #0ff, 0 0 30px #0ff;
     }
+
     /* Dark Mode Toggle Glow */
     .toggle-btn {
       padding: 8px 14px;
@@ -77,11 +137,13 @@
       font-weight: bold;
       transition: 0.3s;
     }
+
     .dark .toggle-btn {
       background: #2c3e50;
       color: #0ff;
       box-shadow: 0 0 10px #00f, 0 0 20px #0ff;
     }
+
   </style>
 </head>
 <body>
@@ -96,10 +158,11 @@
       <li><a href="stock.php">Product / Stock</a></li>
       <li><a href="appointment.php">Appointments / Booking</a></li>
       <li><a href="orders.php">Order Tracking</a></li>
+      <li><a href="user_management.php">Account Management</a></li>
     </ul>
     <div class="logout">
       <form action="logout.php" method="POST">
-        <button type="submit">Logout</button>
+        <button type="submit">Logout 🚪</button>
       </form>
     </div>
   </div>

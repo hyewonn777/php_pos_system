@@ -1,35 +1,48 @@
 ﻿<?php
-require 'db.php';
 session_start();
+require 'db.php';
 
-// If already logged in, go to dashboard
-if (isset($_SESSION['admin'])) {
+// Already logged in → go to index
+if (isset($_SESSION['admin']) || isset($_SESSION['cashier'])) {
     header("Location: index.php");
     exit();
 }
 
-$error = '';
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
+$error = "";
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username']);
     $password = trim($_POST['password']);
 
-    // Prepared statement for admin user lookup
-    $stmt = $conn->prepare("SELECT * FROM admin WHERE username = ?");
+    /* -------------------- ADMIN LOGIN -------------------- */
+    $stmt = $conn->prepare("SELECT * FROM admin WHERE username = ? LIMIT 1");
     $stmt->bind_param("s", $username);
     $stmt->execute();
-    $result = $stmt->get_result();
-    $admin = $result->fetch_assoc();
+    $admin = $stmt->get_result()->fetch_assoc();
 
-    // Verify password using SHA256 hash
     if ($admin && hash('sha256', $password) === $admin['password_hash']) {
-        $_SESSION['admin'] = $admin['username'];  // store session
+        $_SESSION['admin'] = $admin['username'];
         header("Location: index.php");
         exit();
-    } else {
-        $error = "❌ Invalid username or password!";
     }
+
+    /* -------------------- CASHIER LOGIN -------------------- */
+    $stmt = $conn->prepare("SELECT * FROM cashier WHERE username = ? LIMIT 1");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $cashier = $stmt->get_result()->fetch_assoc();
+
+    if ($cashier && hash('sha256', $password) === $cashier['password_hash']) {
+        $_SESSION['cashier'] = $cashier['username'];
+        header("Location: index.php");
+        exit();
+    }
+
+    // If both fail
+    $error = "❌ Invalid username or password!";
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -47,9 +60,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
       --text: #ffffff;
     }
 
-    html,body{height:100%;margin:0;font-family:'Poppins',system-ui,Segoe UI,Roboto,Arial;}
+    html,body {
+        height:100%;
+        margin:0;
+        font-family:'Poppins',system-ui,Segoe UI,Roboto,Arial;
+    }
 
-    body{
+    body {
       display:flex;
       align-items:center;
       justify-content:center;
@@ -58,7 +75,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 
     /* background GIF/video-like */
-    body::before{
+    body::before {
       content:"";
       position:fixed;
       inset:0;
@@ -67,7 +84,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
       z-index:-2;
     }
     /* dark overlay for legibility */
-    body::after{
+    body::after {
       content:"";
       position:fixed;
       inset:0;
@@ -75,7 +92,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
       z-index:-1;
     }
 
-    .login-wrap{
+    .login-wrap {
       width: 640px;
       max-width: 94%;
       display: grid;
@@ -145,14 +162,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     input[type="text"], input[type="password"]{
       width:100%;
-      height:30px;
+      height:46px;
       padding:10px 12px;
       border-radius:10px;
       border:none;
       outline:none;
       background: var(--glass);
       color:var(--text);
-      font-size:16px;
+      font-size:15px;
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
     }
     input::placeholder { color: rgba(255,255,255,0.6); }

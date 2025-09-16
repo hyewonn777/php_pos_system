@@ -115,7 +115,7 @@ body {
 
 /* Main */
 .content {
-    margin-left: 260px;
+    margin-left: 260px;/*Original: 260px;*/
     padding: 24px
 }
 

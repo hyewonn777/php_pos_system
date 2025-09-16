@@ -265,54 +265,161 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
       --sidebar-bg: #2c3e50;
       --sidebar-text: #ecf0f1;
     }
-    .dark { --bg:#1e1e1e; --text:#f5f5f5; --card-bg:#2c2c2c; --sidebar-bg:#111; --sidebar-text:#bbb; }
-    body{ margin:0; font-family:Arial, sans-serif; background:var(--bg); color:var(--text); display:flex; transition:all .3s ease; }
+
+    .dark { 
+        --bg:#1e1e1e; 
+        --text:#f5f5f5; 
+        --card-bg:#2c2c2c; 
+        --sidebar-bg:#111; 
+        --sidebar-text:#bbb; 
+    }
+   
+    body{ 
+        margin:0; 
+        font-family:Arial, sans-serif; 
+        background:var(--bg); 
+        color:var(--text); 
+        display:flex; 
+        transition:all .3s ease; 
+    }
+    
     .sidebar {
-      width: 220px; background: var(--sidebar-bg); color: var(--sidebar-text);
-      height: 100vh; padding: 20px; display: flex; flex-direction: column;
+      width: 220px; 
+      background: var(--sidebar-bg); 
+      color: var(--sidebar-text);
+      height: 100vh; 
+      padding: 20px; 
+      display: flex; 
+      flex-direction: column;
     }
-    .sidebar h2 { text-align: center; margin-bottom: 20px; }
-    .sidebar ul { list-style: none; padding: 0; flex: 1; }
-    .sidebar ul li { margin: 15px 0; }
-    .sidebar ul li a { color: var(--sidebar-text); text-decoration: none; }
-    .sidebar ul li a:hover { text-decoration: underline; }
-    .content{ flex:1; padding:20px; }
-    table{ border-collapse:collapse; width:100%; margin-top:16px; }
-    th, td{ border:1px solid #e3e3e3; padding:10px; text-align:left; vertical-align:middle; }
-    th{ background:#00000000; }
-    img.thumb{ width:50px; height:50px; object-fit:cover; border-radius:4px; }
-    .actions { display:flex; gap:8px; align-items:center; }
-    .btn { padding:6px 10px; border-radius:6px; border:none; cursor:pointer; }
-    .btn.edit { background:#3498db; color:#fff; }
-    .btn.delete { background:#e74c3c; color:#fff; }
-    button.toggle-btn {
-    cursor: pointer;
-    padding: 8px 12px;
-    border-radius: 5px;
-    border: none;
-    background: #3498db;
-    color: white;
-    font-weight: bold;
+    
+    .sidebar h2 { 
+        text-align: center; 
+        margin-bottom: 20px; 
     }
-    .edit-row { background:#fbfbfb; }
-    .form-inline input[type="text"], .form-inline input[type="number"] { padding:6px; margin-right:6px; }
-    .csv-tools { margin-top:12px; padding:12px; background:var(--card-bg); border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.05); display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    .small { font-size:13px; color:#666; margin-top:8px; }
+    
+    .sidebar ul { 
+        list-style: none; 
+        padding: 0; 
+        flex: 1; 
+    }
+    
+    .sidebar ul li { 
+        margin: 15px 0; 
+    }
+    
+    .sidebar ul li a { 
+        color: var(--sidebar-text); 
+        text-decoration: none; 
+    }
+    
+    .sidebar ul li a:hover { 
+        text-decoration: underline; 
+    }
+    
+    .content { 
+        flex:1; padding:20px; }
+    
+    table { 
+        border-collapse:collapse; 
+        width:100%; 
+        margin-top:16px; 
+    }
+    
+    th, td { 
+        border:1px solid #e3e3e3; 
+        padding:10px; 
+        text-align:left; 
+        vertical-align:middle; 
+    }
+    
+    th { 
+        background:#00000000; 
+    }
+    
+    img.thumb { 
+        width:50px; 
+        height:50px; 
+        object-fit:cover; 
+        border-radius:4px; 
+    }
+    
+    .actions { 
+        display:flex; 
+        gap:8px; 
+        align-items:center; 
+    }
+    
+    .btn { 
+        padding:6px 10px; 
+        border-radius:6px; 
+        border:none; 
+        cursor:pointer; 
+    }
+    
+    .btn.edit { 
+        background:#3498db; 
+        color:#fff; 
+    }
+    
+    .btn.delete { 
+      background:#e74c3c; 
+      color:#fff; 
+    }
+
+      button.toggle-btn {
+      cursor: pointer;
+      padding: 8px 12px;
+      border-radius: 5px;
+      border: none;
+      background: #3498db;
+      color: white;
+      font-weight: bold;
+    }
+
+    .edit-row { 
+        background:#fbfbfb; 
+    }
+
+    .form-inline input[type="text"], .form-inline input[type="number"] { 
+        padding:6px; margin-right:6px; 
+    }
+    
+    .csv-tools { 
+        margin-top:12px; 
+        padding:12px; 
+        background:var(--card-bg); 
+        border-radius:8px; 
+        box-shadow:0 2px 6px rgba(0,0,0,0.05); 
+        display:flex; gap:12px; 
+        align-items:center; 
+        flex-wrap:wrap; 
+    }
+    
+    .small { 
+        font-size:13px; 
+        color:#666; 
+        margin-top:8px; 
+    }
+    
     .topbar {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: 20px;
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 20px;
     }
+
     /* Clock Glow */
     #clock {
       font-weight: bold;
       font-size: 16px;
       transition: 0.3s;
     }
+
     .dark #clock {
       color: #0ff;
       text-shadow: 0 0 10px #00f, 0 0 20px #0ff, 0 0 30px #0ff;
     }
+
     /* Dark Mode Toggle Glow */
     .toggle-btn {
       padding: 8px 14px;
@@ -322,11 +429,13 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
       font-weight: bold;
       transition: 0.3s;
     }
+
     .dark .toggle-btn {
       background: #2c3e50;
       color: #0ff;
       box-shadow: 0 0 10px #00f, 0 0 20px #0ff;
     }
+
   </style>
 </head>
 <body>
@@ -341,9 +450,10 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
       <li><a href="stock.php">Product / Stock</a></li>
       <li><a href="appointment.php">Appointments / Booking</a></li>
       <li><a href="orders.php">Order Tracking</a></li>
+      <li><a href="user_management.php">Account Management</a></li>
     </ul>
     <div style="margin-top:auto;">
-      <form action="logout.php" method="POST"><button type="submit" style="width:100%; padding:8px; border-radius:6px; border:none; background:#e74c3c; color:#fff;">Logout</button></form>
+      <form action="logout.php" method="POST"><button type="submit" style="width:100%; padding:8px; border-radius:6px; border:none; background:#e74c3c; color:#fff;">Logout 🚪</button></form>
     </div>
   </div>
 

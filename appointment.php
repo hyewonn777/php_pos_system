@@ -341,10 +341,11 @@ $events_json = json_encode($events);
       <li><a href="stock.php">Product / Stock</a></li>
       <li><a href="appointment.php">Appointments / Booking</a></li>
       <li><a href="orders.php">Order Tracking</a></li>
+      <li><a href="user_management.php">Account Management</a></li>
     </ul>
     <div class="logout">
       <form action="logout.php" method="POST">
-        <button type="submit">Logout</button>
+        <button type="submit">Logout 🚪</button>
       </form>
     </div>
   </div>
