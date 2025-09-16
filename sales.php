@@ -82,7 +82,7 @@ while ($row = $result->fetch_assoc()) {
     $sales[] = $row;
     $totalSales += floatval($row['total']);
     $totalRevenue += floatval($row['total']) * 0.9; // let's assume there's a 10% cost
-}
+} //
 $result->free();
 $transactions = count($sales);
 
