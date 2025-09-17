@@ -165,7 +165,8 @@ input[type="text"], input[type="number"], input[type="date"], select, textarea {
 }
 
 input[type="file"] {
-    color: var(--text)
+    color: var(--text) ;
+    align-content: center;
 }
 
 button, .btn {

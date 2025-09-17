@@ -63,41 +63,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // DELETE single
-    if (isset($_POST['delete_product']) && isset($_POST['id'])) {
-        $delete_id = intval($_POST['id']);
+    // BULK DELETE
+if (isset($_POST['bulk_delete']) && !empty($_POST['selected'])) {
+    $ids = array_map('intval', $_POST['selected']);
+    $in  = implode(',', $ids);
 
-        // find image
-        $stmt = $conn->prepare("SELECT image_path FROM stock WHERE id = ?");
-        if ($stmt) {
-            $stmt->bind_param("i", $delete_id);
-            $stmt->execute();
-            $stmt->bind_result($imagePath);
-            $stmt->fetch();
-            $stmt->close();
+    // remove images first
+    $imgQ = $conn->query("SELECT image_path FROM stock WHERE id IN ($in)");
+    while ($img = $imgQ->fetch_assoc()) {
+        if (!empty($img['image_path']) && file_exists(__DIR__ . '/' . $img['image_path'])) {
+            @unlink(__DIR__ . '/' . $img['image_path']);
         }
-
-        if (!empty($imagePath)) {
-            $fullPath = __DIR__ . '/' . $imagePath;
-            if (file_exists($fullPath)) @unlink($fullPath);
-        }
-
-        $stmt = $conn->prepare("DELETE FROM stock WHERE id = ?");
-        if ($stmt) {
-            $stmt->bind_param("i", $delete_id);
-            if ($stmt->execute()) {
-                $_SESSION['flash'] = "Product deleted successfully!";
-            } else {
-                $_SESSION['flash'] = "Error deleting product: " . $stmt->error;
-            }
-            $stmt->close();
-        } else {
-            $_SESSION['flash'] = "Delete prepare failed: " . $conn->error;
-        }
-
-        header("Location: stock.php");
-        exit;
     }
+
+    if ($conn->query("DELETE FROM stock WHERE id IN ($in)")) {
+        $_SESSION['flash'] = "Selected products deleted successfully!";
+    } else {
+        $_SESSION['flash'] = "Error deleting selected: " . $conn->error;
+    }
+
+    header("Location: stock.php");
+    exit;
+}
+
 
     // ADD product
     if (isset($_POST['add_product'])) {
@@ -257,7 +245,6 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
   <title>Stock / Product Management</title>
   <link rel="stylesheet" href="css/admin.css">
   <style>
-    /* preserve your existing style but add small improvements */
     :root {
       --bg: #f9f9f9;
       --text: #222;
@@ -281,6 +268,7 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
         color:var(--text); 
         display:flex; 
         transition:all .3s ease; 
+        width: 100%
     }
     
     .sidebar {
@@ -408,6 +396,11 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
       margin-bottom: 20px;
     }
 
+     #stockTableForm table {
+    width: 100% !important;
+    table-layout: auto;
+  }
+
   </style>
 </head>
 <body>
@@ -449,123 +442,125 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
       </div>
     </div>
 
-    <!-- Add Product -->
-    <form id="productForm" enctype="multipart/form-data" method="POST" style="padding:12px; background:var(--card-bg); border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.04);">
-      <h3 style="margin-top:0;">Add Product</h3>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
-        <input type="text" name="category" placeholder="Category" required>
-        <input type="text" name="name" placeholder="Product Name" required>
-        <input type="number" name="qty" placeholder="Quantity" min="0" value="0" required>
-        <input type="number" step="0.01" name="price" placeholder="Price" required>
-        <input type="file" name="image" accept="image/*" required>
-        <button type="submit" name="add_product" class="btn" style="background:#27ae60;color:#fff;">Add Product 📑➕</button>
-      </div>
-    </form>
+<!-- Add Product + CSV + Bulk Delete -->
+<div style="margin-bottom:16px; display:flex; flex-wrap:wrap; gap:8px;">
 
-    <!-- CSV Tools -->
-    <div class="csv-tools">
-      <form action="stock.php" method="POST" enctype="multipart/form-data" style="display:flex; gap:8px; align-items:center;">
-        <input type="file" name="csv_file" accept=".csv">
-        <button type="submit" name="import_csv" class="btn" style="background:#3498db; color:#fff;">📥 Import</button>
-        <button type="submit" name="export_csv" class="btn" style="background:#2ecc71; color:#fff;">📤 Export</button>
-        <button type="submit" name="generate_template" class="btn" style="background:#9b59b6; color:#fff;">📄 Template</button>
-      </form>
-      <div class="small">CSV File Only: <i>Category, Name, Quantity, Price, Image</i> <b><i>(NOTE: Quantity & Image are optional)</i></b></div>
-    </div>
+ <!-- Add Product + Bulk Delete -->
+<form id="productForm" enctype="multipart/form-data" method="POST" 
+      style="padding:12px; background:#fff; border:1px solid #e0e0e0; border-radius:8px; margin-bottom:16px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+  
+  <input type="text" name="category" placeholder="Category" required class="form-control" style="flex:1;">
+  <input type="text" name="name" placeholder="Product Name" required class="form-control" style="flex:1;">
+  <input type="number" name="qty" placeholder="0" min="0" value="0" required class="form-control" style="width:100px;">
+  <input type="number" step="0.01" name="price" placeholder="Price" required class="form-control" style="width:120px;">
+  <input type="file" name="image" accept="image/*" class="form-control">
 
-    <!-- Stock Table -->
-    <table>
-     <thead>
+  <!-- Add Product -->
+  <button type="submit" name="add_product" class="btn" style="background:#27ae60; color:#fff;">Add Product 📑➕</button>
+
+  <!-- Bulk Delete -->
+  <button type="submit" name="bulk_delete" form="stockTableForm" 
+          onclick="return confirm('Are you sure you want to delete selected products?');" 
+          class="btn" style="background:#e74c3c; color:#fff;">🗑 Delete Selected</button>
+</form>
+
+<!-- CSV Tools -->
+<div class="csv-tools" style="padding:12px; background:#fff; border:1px solid #e0e0e0; border-radius:8px; margin-bottom:16px;">
+  <form action="stock.php" method="POST" enctype="multipart/form-data" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+    <input type="file" name="csv_file" accept=".csv" class="form-control">
+    <button type="submit" name="import_csv" class="btn" style="background:#3498db; color:#fff;">📥 Import</button>
+    <button type="submit" name="export_csv" class="btn" style="background:#2ecc71; color:#fff;">📤 Export</button>
+    <button type="submit" name="generate_template" class="btn" style="background:#9b59b6; color:#fff;">📄 Template</button>
+  </form>
+  <div class="small" style="margin-top:6px;">
+    CSV File Only: <i>Category, Name, Quantity, Price, Image</i> 
+    <b><i>(NOTE: Quantity & Image are optional)</i></b>
+  </div>
+</div>
+
+<!-- Stock Table -->
+<div class="container-fluid" style="width:100%"">
+<form method="POST" id="stockTableForm">
+  <table class="table table-striped table-bordered">
+    <thead>
       <tr>
-       <th>ID</th>
-       <th>Category</th>
+        <th><input type="checkbox" id="selectAll"></th>
+        <th>ID</th>
+        <th>Category</th>
         <th>Product Name</th>
         <th>Price</th>
         <th>Quantity</th>
         <th>Image</th>
         <th>Action</th>
       </tr>
-     </thead>
-      <tbody>
-        <?php
-        $counter = 1;
-        $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
-        while ($row = $result->fetch_assoc()):
-        ?>
-        <tr>
-          <td><?= $counter++; ?></td>
-          <td><?= htmlspecialchars($row['category']) ?></td>
-          <td><?= htmlspecialchars($row['name']) ?></td>
-          <td>₱<?= number_format((float)$row['price'],2) ?></td>
-          <td><?= isset($row['qty']) ? intval($row['qty']) : 0 ?></td>
-          <td><?php if (!empty($row['image_path'])): ?><img class="thumb" src="<?= htmlspecialchars($row['image_path']) ?>" alt="img"><?php endif; ?></td>
-          <td>
-            <div class="actions">
-              <button class="btn edit" type="button" onclick="toggleEdit(<?= $row['id'] ?>)">✒️ Edit</button>
+    </thead>
+    <tbody>
+      <?php
+      $counter = 1;
+      $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
+      while ($row = $result->fetch_assoc()):
+      ?>
+      <tr>
+        <td><input type="checkbox" name="selected[]" value="<?= $row['id'] ?>"></td>
+        <td><?= $counter++; ?></td>
+        <td><?= htmlspecialchars($row['category']) ?></td>
+        <td><?= htmlspecialchars($row['name']) ?></td>
+        <td>₱<?= number_format((float)$row['price'],2) ?></td>
+        <td><?= intval($row['qty']) ?></td>
+        <td>
+          <?php if (!empty($row['image_path'])): ?>
+            <img src="<?= htmlspecialchars($row['image_path']) ?>" width="50">
+          <?php endif; ?>
+        </td>
+        <td>
+          <div class="d-flex gap-1">
+            <button class="btn btn-sm btn-warning" type="button" onclick="toggleEdit(<?= $row['id'] ?>)">Edit</button>
 
-              <form method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this product?');">
-                <input type="hidden" name="id" value="<?= $row['id'] ?>">
-                <input type="hidden" name="delete_product" value="1">
-                <button class="btn delete" type="submit">🗑 Delete</button>
-              </form>
-            </div>
-          </td>
-        </tr>
-
-        <!-- hidden edit row -->
-        <tr id="edit-row-<?= $row['id'] ?>" class="edit-row" style="display:none;">
-          <td colspan="7">
-            <form method="POST" enctype="multipart/form-data" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-              <input type="hidden" name="edit_id" value="<?= $row['id'] ?>">
-              <input type="text" name="category" value="<?= htmlspecialchars($row['category']) ?>" required>
-              <input type="text" name="name" value="<?= htmlspecialchars($row['name']) ?>" required>
-              <input type="number" name="qty" value="<?= intval($row['qty']) ?>" min="0" required>
-              <input type="number" step="0.01" name="price" value="<?= htmlspecialchars($row['price']) ?>" required>
-              <input type="file" name="image" accept="image/*">
-              <button type="submit" name="update_product" class="btn edit">💾 Save</button>
-              <button type="button" class="btn" onclick="toggleEdit(<?= $row['id'] ?>)">❌ Cancel</button>
+            <!-- Per-row delete -->
+            <form method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this product?');">
+              <input type="hidden" name="id" value="<?= $row['id'] ?>">
+              <input type="hidden" name="delete_product" value="1">
+              <!-- <button class="btn btn-sm btn-danger" type="submit">Delete</button> -->
             </form>
-          </td>
-        </tr>
+          </div>
+        </td>
+      </tr>
 
-        <?php endwhile; ?>
-      </tbody>
-    </table>
+      <!-- hidden edit row -->
+      <tr id="edit-row-<?= $row['id'] ?>" class="edit-row" style="display:none;">
+        <td colspan="8">
+          <form method="POST" enctype="multipart/form-data" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+            <input type="hidden" name="edit_id" value="<?= $row['id'] ?>">
+            <input type="text" name="category" value="<?= htmlspecialchars($row['category']) ?>" required>
+            <input type="text" name="name" value="<?= htmlspecialchars($row['name']) ?>" required>
+            <input type="number" name="qty" value="<?= intval($row['qty']) ?>" min="0" required>
+            <input type="number" step="0.01" name="price" value="<?= htmlspecialchars($row['price']) ?>" required>
+            <input type="file" name="image" accept="image/*">
+            <button type="submit" name="update_product" class="btn btn-primary btn-sm">💾 Save</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit(<?= $row['id'] ?>)">❌ Cancel</button>
+          </form>
+        </td>
+      </tr>
+      <?php endwhile; ?>
+    </tbody>
+  </table>
+</form>
 
-    <!-- flash -->
-    <?php if (!empty($_SESSION['flash'])): ?>
-      <script> alert("<?= addslashes($_SESSION['flash']) ?>"); </script>
-      <?php unset($_SESSION['flash']); ?>
-    <?php endif; ?>
+<script>
+  // toggle edit rows
+  function toggleEdit(id) {
+    const el = document.getElementById('edit-row-' + id);
+    if (!el) return;
+    el.style.display = el.style.display === 'table-row' ? 'none' : 'table-row';
+  }
 
-  </div>
+  // select all checkboxes
+  document.getElementById('selectAll').addEventListener('change', function() {
+    document.querySelectorAll('input[name="selected[]"]').forEach(cb => cb.checked = this.checked);
+  });
+</script>
 
-  <script>
-    function toggleEdit(id){
-      const el = document.getElementById('edit-row-'+id);
-      if(!el) return;
-      el.style.display = el.style.display === 'table-row' ? 'none' : 'table-row';
-      // scroll into view when opening
-      if(el.style.display === 'table-row'){ el.scrollIntoView({behavior:'smooth', block:'center'}); }
-    }
 
-    function toggleTheme() {
-      document.body.classList.toggle("dark");
-      localStorage.setItem("theme", document.body.classList.contains("dark") ? "dark" : "light");
-    }
-    if (localStorage.getItem("theme") === "dark") {
-      document.body.classList.add("dark");
-    }
-  </script>
 
-  <script>
-    function updateClock() {
-      const now = new Date();
-      document.getElementById("clock").innerText =
-    now.toLocaleDateString() + " " + now.toLocaleTimeString();
-    }
-    setInterval(updateClock, 1000);
-      updateClock();
-  </script>
 </body>
 </html>
