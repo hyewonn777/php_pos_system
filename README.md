@@ -1,4 +1,4 @@
-# 🛒 POS System – Admin Panel (Yet)
+# POS System – Admin Panel (Yet)
 
 A PHP & MySQL-based Point of Sale (POS) system with product management, sales tracking, and CSV import/export features.  
 This project is designed for Marcomedia in order to manage  their **products, sales, orders, and appointments** efficiently.
