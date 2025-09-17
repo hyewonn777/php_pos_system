@@ -116,33 +116,6 @@
         background: #2980b9; 
     }
 
-    /* Clock Glow */
-    #clock {
-      font-weight: bold;
-      font-size: 16px;
-      transition: 0.3s;
-    }
-
-    .dark #clock {
-      color: #0ff;
-      text-shadow: 0 0 10px #00f, 0 0 20px #0ff, 0 0 30px #0ff;
-    }
-
-    /* Dark Mode Toggle Glow */
-    .toggle-btn {
-      padding: 8px 14px;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-weight: bold;
-      transition: 0.3s;
-    }
-
-    .dark .toggle-btn {
-      background: #2c3e50;
-      color: #0ff;
-      box-shadow: 0 0 10px #00f, 0 0 20px #0ff;
-    }
 
   </style>
 </head>
@@ -162,7 +135,7 @@
     </ul>
     <div class="logout">
       <form action="logout.php" method="POST">
-        <button type="submit">Logout 🚪</button>
+        <button type="submit">Logout</button>
       </form>
     </div>
   </div>

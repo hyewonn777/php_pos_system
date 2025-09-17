@@ -408,34 +408,6 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
       margin-bottom: 20px;
     }
 
-    /* Clock Glow */
-    #clock {
-      font-weight: bold;
-      font-size: 16px;
-      transition: 0.3s;
-    }
-
-    .dark #clock {
-      color: #0ff;
-      text-shadow: 0 0 10px #00f, 0 0 20px #0ff, 0 0 30px #0ff;
-    }
-
-    /* Dark Mode Toggle Glow */
-    .toggle-btn {
-      padding: 8px 14px;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-weight: bold;
-      transition: 0.3s;
-    }
-
-    .dark .toggle-btn {
-      background: #2c3e50;
-      color: #0ff;
-      box-shadow: 0 0 10px #00f, 0 0 20px #0ff;
-    }
-
   </style>
 </head>
 <body>
@@ -453,7 +425,7 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
       <li><a href="user_management.php">Account Management</a></li>
     </ul>
     <div style="margin-top:auto;">
-      <form action="logout.php" method="POST"><button type="submit" style="width:100%; padding:8px; border-radius:6px; border:none; background:#e74c3c; color:#fff;">Logout 🚪</button></form>
+      <form action="logout.php" method="POST"><button type="submit" style="width:100%; padding:8px; border-radius:6px; border:none; background:#e74c3c; color:#fff;">Logout</button></form>
     </div>
   </div>
 
@@ -505,13 +477,13 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
     <table>
      <thead>
       <tr>
-       <th>ID 🔑</th>
-       <th>Category 📦</th>
-        <th>Product Name 🛒</th>
-        <th>Price 💵</th>
-        <th>Quantity 📊</th>
-        <th>Image 🖼️</th>
-        <th>Action ⚙️</th>
+       <th>ID</th>
+       <th>Category</th>
+        <th>Product Name</th>
+        <th>Price</th>
+        <th>Quantity</th>
+        <th>Image</th>
+        <th>Action</th>
       </tr>
      </thead>
       <tbody>

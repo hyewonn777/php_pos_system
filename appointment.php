@@ -303,30 +303,7 @@ $events_json = json_encode($events);
       border-radius: 
       10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
     }
-    /* Clock Glow */
-    #clock {
-      font-weight: bold;
-      font-size: 16px;
-      transition: 0.3s;
-    }
-    .dark #clock {
-      color: #0ff;
-      text-shadow: 0 0 10px #00f, 0 0 20px #0ff, 0 0 30px #0ff;
-    }
-    /* Dark Mode Toggle Glow */
-    .toggle-btn {
-      padding: 8px 14px;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-weight: bold;
-      transition: 0.3s;
-    }
-    .dark .toggle-btn {
-      background: #2c3e50;
-      color: #0ff;
-      box-shadow: 0 0 10px #00f, 0 0 20px #0ff;
-    }   
+
     </style>
 </head>
 <body>
@@ -345,7 +322,7 @@ $events_json = json_encode($events);
     </ul>
     <div class="logout">
       <form action="logout.php" method="POST">
-        <button type="submit">Logout 🚪</button>
+        <button type="submit">Logout</button>
       </form>
     </div>
   </div>
@@ -353,7 +330,7 @@ $events_json = json_encode($events);
   <div class="content">
     <div class="topbar">
       <div id="clock" style="margin-right:auto; font-weight:bold; font-size:16px;"></div>
-      <button class="toggle-btn" onclick="toggleTheme()">🌙 Toggle Dark Mode</button>
+      <button class="toggle-btn" onclick="toggleTheme()">Toggle Dark Mode</button>
     </div>
     <h1>Appointments / Booking</h1>
     <p>Manage client bookings below.</p>
@@ -394,15 +371,15 @@ $events_json = json_encode($events);
     <table>
       <thead>
         <tr>
-          <th>ID 🪪</th>
-          <th>Customer 👥</th>
-          <th>Date 📆</th>
-          <th>Start 🟢</th>
-          <th>Finish 🔴</th>
-          <th>Location 📍</th>
-          <th>Status 📖</th>
-          <th>Created at 🕖</th>
-          <th>Actions 🗳️</th>
+          <th>ID</th>
+          <th>Customer</th>
+          <th>Date</th>
+          <th>Start</th>
+          <th>Finish</th>
+          <th>Location</th>
+          <th>Status</th>
+          <th>Created at</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>

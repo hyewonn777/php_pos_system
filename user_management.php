@@ -286,38 +286,6 @@ if ($res2) {
         background:#fafafa; 
     }
 
-    /* Clock Glow */
-    #clock {
-      font-weight: bold;
-      font-size: 16px;
-      transition: 0.3s;
-    }
-
-    .dark #clock {
-      color: #0ff;
-      text-shadow: 0 0 10px #00f, 0 0 20px #0ff, 0 0 30px #0ff;
-    }
-
-    /* Dark Mode Toggle Glow */
-    .toggle-btn {
-      padding: 8px 14px;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      font-weight: bold;
-      transition: 0.3s;
-    }
-
-    .dark .toggle-btn {
-      background: #2c3e50;
-      color: #0ff;
-      box-shadow: 0 0 10px #00f, 0 0 20px #0ff, 0 0 30px #0ff;
-    }
-
-    button.toggle-btn:hover { 
-      background: #2980b9;
-    }
-
     /* Transparent password box */
     input[type="password"] {
       background: transparent;
@@ -368,7 +336,7 @@ if ($res2) {
 <div class="content">
     <div class="topbar">
       <div id="clock" style="margin-right:auto; font-weight:bold; font-size:16px;"></div>
-      <button class="toggle-btn" onclick="toggleTheme()">🌙 Toggle Dark Mode</button>
+      <button class="toggle-btn" onclick="toggleTheme()">Toggle Dark Mode</button>
     </div>
 
     <?php if (!empty($error)) echo "<p style='color:red;font-weight:bold;'>$error</p>"; ?>
@@ -379,7 +347,7 @@ if ($res2) {
       <form method="POST">
         <input type="text" name="username" placeholder="Username" required>
         <input type="password" name="password" placeholder="Password" required>
-        <button type="submit" name="add_admin">➕ Add Admin</button>
+        <button type="submit" name="add_admin">Add Admin</button>
       </form>
       <table>
         <tr><th>ID</th><th>Username</th><th>Created At</th><th>Action</th></tr>
@@ -393,11 +361,11 @@ if ($res2) {
                 <input type="hidden" name="id" value="<?= $a['id'] ?>">
                 <input type="text" name="username" value="<?= htmlspecialchars($a['username']) ?>">
                 <input type="password" name="password" placeholder="New Password (optional)">
-                <button type="submit" name="update_admin">💾 Update</button>
+                <button type="submit" name="update_admin">Update</button>
               </form>
               <form method="POST" style="display:inline;">
                 <input type="hidden" name="id" value="<?= $a['id'] ?>">
-                <button type="submit" name="delete_admin" onclick="return confirm('Delete this admin?')">🗑️ Delete</button>
+                <button type="submit" name="delete_admin" onclick="return confirm('Delete this admin?')">Delete</button>
               </form>
             </td>
           </tr>
@@ -408,13 +376,13 @@ if ($res2) {
     <br>
     <!-- Cashier Management -->
     <div class="section">
-      <h2>💼 Cashier Accounts</h2>
+      <h2>Cashier Accounts</h2>
       <form method="POST">
         <input type="text" name="fullname" placeholder="Full Name" required>
         <input type="text" name="username" placeholder="Username" required>
         <input type="password" name="password" placeholder="Password" required>
         <!-- keep your original button name so UI unchanged -->
-        <button type="submit" name="user_management">➕ Add Cashier</button>
+        <button type="submit" name="user_management">Add Cashier</button>
       </form>
       <table>
         <tr><th>ID</th><th>Full Name</th><th>Username</th><th>Created At</th><th>Action</th></tr>
@@ -430,11 +398,11 @@ if ($res2) {
                 <input type="text" name="fullname" value="<?= htmlspecialchars($c['fullname']) ?>">
                 <input type="text" name="username" value="<?= htmlspecialchars($c['username']) ?>">
                 <input type="password" name="password" placeholder="New Password (optional)">
-                <button type="submit" name="update_cashier">💾 Update</button>
+                <button type="submit" name="update_cashier">Update</button>
               </form>
               <form method="POST" style="display:inline;">
                 <input type="hidden" name="id" value="<?= $c['id'] ?>">
-                <button type="submit" name="delete_cashier" onclick="return confirm('Delete this cashier?')">🗑️ Delete</button>
+                <button type="submit" name="delete_cashier" onclick="return confirm('Delete this cashier?')">Delete</button>
               </form>
             </td>
           </tr>

@@ -86,17 +86,6 @@ while ($row = $result->fetch_assoc()) {
 $result->free();
 $transactions = count($sales);
 
-/* -------------------- SUMMARY OVERRIDE -------------------- */
-$summaryResult = $conn->query("SELECT * FROM summary WHERE id=1");
-if ($summaryResult && $summaryResult->num_rows > 0) {
-    $summary = $summaryResult->fetch_assoc();
-    if ($summary['total_sales'] > 0 || $summary['total_revenue'] > 0) {
-        $totalSales = $summary['total_sales'];
-        $totalRevenue = $summary['total_revenue'];
-    }
-    $summaryResult->free();
-}
-
 /* -------------------- PERFORMANCE -------------------- */
 $performance = $totalRevenue > 5000 ? "Excellent 🚀" : ($totalRevenue > 1000 ? "Good 👍" : "Needs Improvement ⚠️");
 ?>
@@ -135,34 +124,6 @@ $performance = $totalRevenue > 5000 ? "Excellent 🚀" : ($totalRevenue > 1000 ?
     .logout button:hover { 
       background: #c0392b; 
       box-shadow: 0 0 20px rgba(231,76,60,1); 
-    }
-
-    /* Clock Glow */
-    #clock { 
-      font-weight: bold; 
-      font-size: 16px; 
-      transition: 0.3s; 
-    }
-
-    .dark #clock { 
-      color: #0ff; 
-      text-shadow: 0 0 10px #00f, 0 0 20px #0ff, 0 0 30px #0ff; 
-    }
-
-    /* Dark Mode Toggle */
-    .toggle-btn {
-      padding: 8px 14px; 
-      border: none; 
-      border-radius: 5px;
-      cursor: pointer; 
-      font-weight: bold; 
-      transition: 0.3s;
-    }
-
-    .dark .toggle-btn { 
-      background: #2c3e50; 
-      color: #0ff; 
-      box-shadow: 0 0 10px #00f, 0 0 20px #0ff; 
     }
 
     /* Sales Table */
@@ -307,14 +268,14 @@ $performance = $totalRevenue > 5000 ? "Excellent 🚀" : ($totalRevenue > 1000 ?
       <li><a href="user_management.php">Account Management</a></li>
     </ul>
     <div class="logout">
-      <form action="logout.php" method="POST"><button type="submit">Logout 🚪</button></form>
+      <form action="logout.php" method="POST"><button type="submit">Logout</button></form>
     </div>
   </div>
 
   <div class="content">
     <div class="topbar">
       <div id="clock" style="margin-right:auto;"></div>
-      <button class="toggle-btn" onclick="toggleTheme()">🌙 Toggle Dark Mode</button>
+      <button class="toggle-btn" onclick="toggleTheme()">Toggle Dark Mode</button>
     </div>
 
     <h1>Sales & Tracking</h1>
@@ -322,16 +283,12 @@ $performance = $totalRevenue > 5000 ? "Excellent 🚀" : ($totalRevenue > 1000 ?
 
     <!-- Summary -->
     <div class="summary">
-      <div class="card"><b>💰 Total Sales: </b><?= number_format($totalSales, 2) ?></div>
-      <div class="card"><b>📈 Revenue: </b><?= number_format($totalRevenue, 2) ?></div>
+      <div class="card"><b>Total Sales: </b><?= number_format($totalSales, 2) ?></div>
+      <div class="card"><b>Revenue: </b><?= number_format($totalRevenue, 2) ?></div>
     </div>
 
-    <!-- Admin Manual Override -->
-    <form method="POST" style="margin-bottom:20px;">
-      <input type="number" step="0.01" name="manual_sales" placeholder="Manual Total Sales" required>
-      <input type="number" step="0.01" name="manual_revenue" placeholder="Manual Revenue" required>
-      <button type="submit" name="update_summary">Update Summary 📝</button>
-    </form>
+    <!-- Search -->
+    <input type="text" id="searchInput" class="search-bar" placeholder="🔍 Search product/date...">
 
     <!-- Add Sale Form -->
     <form method="POST" style="margin-bottom:20px;">
@@ -339,16 +296,17 @@ $performance = $totalRevenue > 5000 ? "Excellent 🚀" : ($totalRevenue > 1000 ?
       <input type="text" name="product" placeholder="Product" required>
       <input type="number" name="quantity" placeholder="Quantity" required>
       <input type="number" step="0.01" name="total" placeholder="Total ₱" required>
-      <button type="submit" name="add_sale">Add Sale 📑➕</button>
+      <button type="submit" name="add_sale">Add Sale</button>
     </form>
-
-    <!-- Search -->
-    <input type="text" id="searchInput" class="search-bar" placeholder="🔍 Search product/date...">
 
     <!-- Sales Table -->
     <table id="salesTable">
       <tr>
-        <th>Date 📆</th><th>Product 📦</th><th>Quantity 🏷️</th><th>Total 💳</th><th>Action ⚙️</th>
+        <th>Date</th>
+        <th>Product</th>
+        <th>Quantity</th>
+        <th>Total</th>
+        <th>Action</th>
       </tr>
       <?php foreach ($sales as $row): ?>
         <tr>
@@ -357,7 +315,7 @@ $performance = $totalRevenue > 5000 ? "Excellent 🚀" : ($totalRevenue > 1000 ?
           <td><?= htmlspecialchars($row['quantity']) ?></td>
           <td>₱<?= number_format($row['total'], 2) ?></td>
           <td>
-            <button onclick="toggleEdit(<?= $row['id'] ?>)">✏️ Edit</button>
+            <button onclick="toggleEdit(<?= $row['id'] ?>)">Edit</button>
             <form method="POST" style="display:inline;">
               <input type="hidden" name="id" value="<?= $row['id'] ?>">
               <button type="submit" name="delete_sale" onclick="return confirm('Are you sure?');">🗑️ Delete</button>
@@ -372,8 +330,8 @@ $performance = $totalRevenue > 5000 ? "Excellent 🚀" : ($totalRevenue > 1000 ?
               <input type="text" name="product" value="<?= $row['product'] ?>" required>
               <input type="number" name="quantity" value="<?= $row['quantity'] ?>" required>
               <input type="number" step="0.01" name="total" value="<?= $row['total'] ?>" required>
-              <button type="submit" name="update_sale">💾 Save</button>
-              <button type="button" onclick="toggleEdit(<?= $row['id'] ?>)">❌ Cancel</button>
+              <button type="submit" name="update_sale">Save</button>
+              <button type="button" onclick="toggleEdit(<?= $row['id'] ?>)">Cancel</button>
             </form>
           </td>
         </tr>
