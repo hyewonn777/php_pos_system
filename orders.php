@@ -143,7 +143,7 @@
   <div class="content">
     <div class="topbar">
     <div id="clock" style="margin-right:auto; font-weight:bold; font-size:16px;"></div>
-    <button class="toggle-btn" onclick="toggleTheme()">🌙 Toggle Dark Mode</button>
+    <button class="toggle-btn" onclick="toggleTheme()">Toggle Dark Mode</button>
    </div>
     <h1>Order Tracking</h1>
     <p>Track customer orders and delivery status here.</p>

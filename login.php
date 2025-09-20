@@ -3,7 +3,7 @@ session_start();
 require 'db.php';
 
 // Already logged in → go to index
-if (isset($_SESSION['admin']) || isset($_SESSION['cashier'])) {
+if (isset($_SESSION['admin'])) {
     header("Location: index.php");
     exit();
 }
@@ -26,20 +26,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit();
     }
 
-    /* -------------------- CASHIER LOGIN -------------------- */
-    $stmt = $conn->prepare("SELECT * FROM cashier WHERE username = ? LIMIT 1");
+    /* -------------------- PHOTOGRAPHER LOGIN -------------------- */
+    $stmt = $conn->prepare("SELECT * FROM photographer WHERE username = ? LIMIT 1");
     $stmt->bind_param("s", $username);
     $stmt->execute();
-    $cashier = $stmt->get_result()->fetch_assoc();
+    $photographer = $stmt->get_result()->fetch_assoc();
 
-    if ($cashier && hash('sha256', $password) === $cashier['password_hash']) {
-        $_SESSION['cashier'] = $cashier['username'];
+    if ($photographer && hash('sha256', $password) === $photographer['password_hash']) {
+        $_SESSION['photographer'] = $photographer['username'];
         header("Location: index.php");
         exit();
     }
 
     // If both fail
-    $error = "❌ Invalid username or password!";
+    $error = "Invalid username or password!";
 }
 ?>
 
@@ -58,13 +58,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       --glass: rgba(255,255,255,0.08);
       --glass-strong: rgba(255,255,255,0.12);
       --text: #ffffff;
+
+     /* Default: Dark mode */
+      --bg: #000;
+      --text: #ffffff;
+      --glass: rgba(255, 255, 255, 0.08);
+      --glass-strong: rgba(255, 255, 255, 0.12);
+      --placeholder: rgba(255, 255, 255, 0.6);
+      --error-bg: rgba(255,0,0,0.08);
+      --error-text: #ffb3b3;
     }
+
+    body.light {
+    --bg: #f5f7fb;
+    --text: #111;
+    --glass: rgba(0, 0, 0, 0.05);
+    --glass-strong: rgba(0, 0, 0, 0.1);
+    --placeholder: rgba(0, 0, 0, 0.5);
+    --error-bg: rgba(255,0,0,0.1);
+    --error-text: #b30000;
+  }
+
+
 
     html,body {
         height:100%;
         margin:0;
         font-family:'Poppins',system-ui,Segoe UI,Roboto,Arial;
     }
+
+    /* update inputs */
+  input[type="text"], input[type="password"] {
+    width: 80%;
+    height: 26px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: none;
+    outline: none;
+    background: var(--glass);
+    color: var(--text);
+    font-size: 15px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.02);
+    transition: background 0.3s ease, color 0.3s ease;
+  }
+  input::placeholder { color: var(--placeholder); }
 
     body {
       display:flex;
@@ -150,7 +187,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       margin-bottom:14px;
     }
     .form-row label{
-      width:110px;                    /* fixed label column */
+      width:110px;  /* fixed label column */
       text-align:right;
       font-size:14px;
       color:#dbeafe;
@@ -161,8 +198,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     input[type="text"], input[type="password"]{
-      width:100%;
-      height:46px;
+      width:80%;
+      height:26px;
       padding:10px 12px;
       border-radius:10px;
       border:none;
@@ -204,12 +241,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       .promo{ display:none; }
       .login-box{ padding:20px; }
     }
+    /* For logo */
+    .logo {
+        text-align: center;
+        margin-bottom: 20px;
+    }
+
+    .logo img { 
+        max-width: 120px;
+        height: auto;
+        display: block;
+        margin: 0 auto;
+    }
   </style>
 </head>
 <body>
   <div class="login-wrap">
     <div class="promo" aria-hidden="true">
       <h1>Marcomedia</h1>
+      <div class="logo">
+        <img src="images/rsz_logo.png" alt="Logo">
+    </div>
       <p>The best place to get customized! with 
       secure admin access — manage products, sales, appointments and users. This panel supports role-based access (coming soon).</p>
     </div>
@@ -248,6 +300,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <script>
     // small enhancement: focus username on load
     document.getElementById('username')?.focus();
+
+
   </script>
 </body>
 </html>

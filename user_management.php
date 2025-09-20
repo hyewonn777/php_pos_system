@@ -3,66 +3,6 @@ session_start();
 require 'db.php'; // mysqli connection
 
 $error = '';
-
-/* -------------------- CASHIER CRUD -------------------- */
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-
-    // ADD cashier
-    if (isset($_POST['add_cashier'])) {
-        $fullname = trim($_POST['fullname']);
-        $username = trim($_POST['username']);
-        $password = hash('sha256', trim($_POST['password'])); // SHA256
-
-        $check = $conn->prepare("SELECT id FROM cashier WHERE username=?");
-        $check->bind_param("s", $username);
-        $check->execute();
-        $check->store_result();
-
-        if ($check->num_rows > 0) {
-            $error = "⚠️ Cashier username already exists!";
-        } else {
-            $stmt = $conn->prepare("INSERT INTO cashier (fullname, username, password_hash, created_at) VALUES (?, ?, ?, NOW())");
-            $stmt->bind_param("sss", $fullname, $username, $password);
-            $stmt->execute();
-            $stmt->close();
-            $success = "✅ Cashier added successfully!";
-        }
-        $check->close();
-    }
-
-    // UPDATE cashier
-    if (isset($_POST['update_cashier'])) {
-        $id = intval($_POST['id']);
-        $fullname = trim($_POST['fullname']);
-        $username = trim($_POST['username']);
-
-        if (!empty($_POST['password'])) {
-            $password = hash('sha256', trim($_POST['password']));
-            $stmt = $conn->prepare("UPDATE cashier SET fullname=?, username=?, password_hash=? WHERE id=?");
-            $stmt->bind_param("sssi", $fullname, $username, $password, $id);
-        } else {
-            $stmt = $conn->prepare("UPDATE cashier SET fullname=?, username=? WHERE id=?");
-            $stmt->bind_param("ssi", $fullname, $username, $id);
-        }
-        $stmt->execute();
-        $stmt->close();
-        $success = "✅ Cashier updated successfully!";
-    }
-
-    // DELETE cashier
-    if (isset($_POST['delete_cashier'])) {
-        $id = intval($_POST['id']);
-        $stmt = $conn->prepare("DELETE FROM cashier WHERE id=?");
-        $stmt->bind_param("i", $id);
-        $stmt->execute();
-        $stmt->close();
-        $success = "🗑️ Cashier deleted successfully!";
-    }
-}
-
-// Always fetch latest cashier list
-$cashiers = $conn->query("SELECT * FROM cashier ORDER BY id ASC")->fetch_all(MYSQLI_ASSOC);
-
 /* -------------------- ADMIN CRUD -------------------- */
 /* ADD ADMIN */
 if (isset($_POST['add_admin'])) {
@@ -185,6 +125,66 @@ if ($res2) {
 } else {
     if ($error === '') $error = "Could not load admin users: " . $conn->error;
 }
+
+/* -------------------- PHOTOGRAPHER CRUD -------------------- */
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+
+    // ADD photographer
+    if (isset($_POST['add_photographer'])) {
+        $fullname = trim($_POST['fullname']);
+        $username = trim($_POST['username']);
+        $password = hash('sha256', trim($_POST['password']));
+
+        $check = $conn->prepare("SELECT id FROM photographer WHERE username=?");
+        $check->bind_param("s", $username);
+        $check->execute();
+        $check->store_result();
+
+        if ($check->num_rows > 0) {
+            $error = "⚠️ Photographer username already exists!";
+        } else {
+            $stmt = $conn->prepare("INSERT INTO photographer (fullname, username, password_hash, created_at) VALUES (?, ?, ?, NOW())");
+            $stmt->bind_param("sss", $fullname, $username, $password);
+            $stmt->execute();
+            $stmt->close();
+            $success = "✅ Photographer added successfully!";
+        }
+        $check->close();
+    }
+
+    // UPDATE photographer
+    if (isset($_POST['update_photographer'])) {
+        $id = intval($_POST['id']);
+        $fullname = trim($_POST['fullname']);
+        $username = trim($_POST['username']);
+
+        if (!empty($_POST['password'])) {
+            $password = hash('sha256', trim($_POST['password']));
+            $stmt = $conn->prepare("UPDATE photographer SET fullname=?, username=?, password_hash=? WHERE id=?");
+            $stmt->bind_param("sssi", $fullname, $username, $password, $id);
+        } else {
+            $stmt = $conn->prepare("UPDATE photographer SET fullname=?, username=? WHERE id=?");
+            $stmt->bind_param("ssi", $fullname, $username, $id);
+        }
+        $stmt->execute();
+        $stmt->close();
+        $success = "✅ Photographer updated successfully!";
+    }
+
+    // DELETE photographer
+    if (isset($_POST['delete_photographer'])) {
+        $id = intval($_POST['id']);
+        $stmt = $conn->prepare("DELETE FROM photographer WHERE id=?");
+        $stmt->bind_param("i", $id);
+        $stmt->execute();
+        $stmt->close();
+        $success = "🗑️ Photographer deleted successfully!";
+    }
+}
+
+// Always fetch latest photographer list
+$photographers = $conn->query("SELECT * FROM photographer ORDER BY id ASC")->fetch_all(MYSQLI_ASSOC);
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -278,8 +278,8 @@ if ($res2) {
     }
 
     th { 
-      background:#1976d2; 
-      color:#fff; 
+      background:#333; 
+      color:#ffffff; 
     }
 
     .edit-row td { 
@@ -313,6 +313,7 @@ if ($res2) {
     }
 
 
+
   </style>
 </head>
 <body>
@@ -329,7 +330,7 @@ if ($res2) {
       <li><a href="user_management.php">Account Management</a></li>
     </ul>
     <div class="logout">
-      <form action="logout.php" method="POST"><button type="submit">Logout 🚪</button></form>
+      <form action="logout.php" method="POST"><button type="submit">Logout</button></form>
     </div>
   </div>
 
@@ -343,7 +344,7 @@ if ($res2) {
 
     <!-- Admin Management -->
     <div class="section">
-      <h2>👑 Admin Accounts</h2>
+      <h2>Admin Accounts</h2>
       <form method="POST">
         <input type="text" name="username" placeholder="Username" required>
         <input type="password" name="password" placeholder="Password" required>
@@ -374,42 +375,40 @@ if ($res2) {
     </div>
     <br>
     <br>
-    <!-- Cashier Management -->
-    <div class="section">
-      <h2>Cashier Accounts</h2>
-      <form method="POST">
-        <input type="text" name="fullname" placeholder="Full Name" required>
-        <input type="text" name="username" placeholder="Username" required>
-        <input type="password" name="password" placeholder="Password" required>
-        <!-- keep your original button name so UI unchanged -->
-        <button type="submit" name="user_management">Add Cashier</button>
-      </form>
-      <table>
-        <tr><th>ID</th><th>Full Name</th><th>Username</th><th>Created At</th><th>Action</th></tr>
-        <?php foreach ($cashiers as $c): ?>
-          <tr>
-            <td><?= $c['id'] ?></td>
-            <td><?= htmlspecialchars($c['fullname']) ?></td>
-            <td><?= htmlspecialchars($c['username']) ?></td>
-            <td><?= $c['created_at'] ?></td>
-            <td>
-              <form method="POST" style="display:inline;">
-                <input type="hidden" name="id" value="<?= $c['id'] ?>">
-                <input type="text" name="fullname" value="<?= htmlspecialchars($c['fullname']) ?>">
-                <input type="text" name="username" value="<?= htmlspecialchars($c['username']) ?>">
-                <input type="password" name="password" placeholder="New Password (optional)">
-                <button type="submit" name="update_cashier">Update</button>
-              </form>
-              <form method="POST" style="display:inline;">
-                <input type="hidden" name="id" value="<?= $c['id'] ?>">
-                <button type="submit" name="delete_cashier" onclick="return confirm('Delete this cashier?')">Delete</button>
-              </form>
-            </td>
-          </tr>
-        <?php endforeach; ?>
-      </table>
-    </div>
-  </div>
+  <!-- Photographer Management -->
+<div class="section">
+  <h2>Photographer Accounts</h2>
+  <form method="POST">
+    <input type="text" name="fullname" placeholder="Full Name" required>
+    <input type="text" name="username" placeholder="Username" required>
+    <input type="password" name="password" placeholder="Password" required>
+    <button type="submit" name="add_photographer">Add Photographer</button>
+  </form>
+  <table>
+    <tr><th>ID</th><th>Full Name</th><th>Username</th><th>Created At</th><th>Action</th></tr>
+    <?php foreach ($photographers as $p): ?>
+      <tr>
+        <td><?= $p['id'] ?></td>
+        <td><?= htmlspecialchars($p['fullname']) ?></td>
+        <td><?= htmlspecialchars($p['username']) ?></td>
+        <td><?= $p['created_at'] ?></td>
+        <td>
+          <form method="POST" style="display:inline;">
+            <input type="hidden" name="id" value="<?= $p['id'] ?>">
+            <input type="text" name="fullname" value="<?= htmlspecialchars($p['fullname']) ?>">
+            <input type="text" name="username" value="<?= htmlspecialchars($p['username']) ?>">
+            <input type="password" name="password" placeholder="New Password (optional)">
+            <button type="submit" name="update_photographer">Update</button>
+          </form>
+          <form method="POST" style="display:inline;">
+            <input type="hidden" name="id" value="<?= $p['id'] ?>">
+            <button type="submit" name="delete_photographer" onclick="return confirm('Delete this photographer?')">Delete</button>
+          </form>
+        </td>
+      </tr>
+    <?php endforeach; ?>
+  </table>
+</div>
 
   <script>
     function toggleTheme() {

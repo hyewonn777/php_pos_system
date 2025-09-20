@@ -106,7 +106,7 @@ body {
     }
 
 .sidebar h2 {
-    display: none; /* hide the "Admin Panel" text if the logo is enough */
+    display: none;
 }
 
         .sidebar a.active, .sidebar a:hover {
@@ -115,7 +115,7 @@ body {
 
 /* Main */
 .content {
-    margin-left: 260px;/*Original: 260px;*/
+    margin-left: 260px; /* Original: 260px; */
     padding: 24px
 }
 
@@ -157,9 +157,9 @@ form.inline-form {
 }
 
 input[type="text"], input[type="number"], input[type="date"], select, textarea {
-    background: var(--card);
+    background: #00000000;
     color: var(--text);
-    border: 1px solid var(--border);
+    border: 1px solid #ffffff;
     border-radius: 8px;
     padding: 10px 12px;
 }

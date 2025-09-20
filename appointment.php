@@ -77,10 +77,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 /* ------------------------
    Auto-Cancel Expired
 ------------------------ */
+// Cancel only Pending events if expired
 $conn->query("UPDATE appointments 
     SET status='Cancelled' 
     WHERE CONCAT(date,' ',end_time) < NOW() 
-    AND status!='Cancelled'");
+    AND status='Pending'");
 
 /* ------------------------
    Fetch Events for Calendar
@@ -94,15 +95,17 @@ while ($row = $res->fetch_assoc()) {
     if ($row['status'] === "Cancelled") $color = "#e74c3c";
     if ($row['status'] === "Pending")  $color = "#f1c40f";
 
-    $events[] = [
-        "id"    => $row['id'],
-        "title" => $row['customer'] . " (" . $row['service'] . ")",
-        "start" => $row['date'] . "T" . $row['start_time'],
-        "end"   => $row['date'] . "T" . $row['end_time'],
-        "color" => $color
+        $events[] = [
+        "id"      => $row['id'],
+        "title"   => $row['customer'] . " (" . $row['service'] . ")",
+        "start"   => $row['date'] . "T" . $row['start_time'],
+        "end"     => $row['date'] . "T" . $row['end_time'],
+        "color"   => $color,
+        "location"=> $row['location'],
+        "status"  => $row['status']
     ];
 }
-$events_json = json_encode($events);
+$events_json = json_encode($events);  
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -120,6 +123,9 @@ $events_json = json_encode($events);
       --card-bg:#fff; 
       --sidebar-bg:#2c3e50; 
       --sidebar-text:#ecf0f1; 
+      --border: #ccc;           /* ✅ Added for table/input borders */
+      --button-bg: #3498db;     /* ✅ Added for button background */
+      --button-hover: #2980b9;  /* ✅ Added for button hover */
     }
 
     .dark {
@@ -127,7 +133,10 @@ $events_json = json_encode($events);
       --text:#f5f5f5; 
       --card-bg:#2c2c2c; 
       --sidebar-bg:#111; 
-      --sidebar-text:#bbb; 
+      --sidebar-text:#bbb;
+      --border: #444;           /* ✅ Dark mode border color */
+      --button-bg: #2980b9;     /* ✅ Dark mode button background */
+      --button-hover: #1f6391;
     }
 
     body { 
@@ -235,6 +244,7 @@ $events_json = json_encode($events);
       font-weight:bold; 
       transition:transform 0.2s ease; 
       cursor:pointer;
+      border:1px solid var(--border);
     }
     
     .card:hover {
@@ -291,7 +301,7 @@ $events_json = json_encode($events);
     }
 
     th,td {
-      padding: 10px; 
+      padding: 3px; 
       text-align: center;
     }
 
@@ -303,6 +313,95 @@ $events_json = json_encode($events);
       border-radius: 
       10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
     }
+
+  #eventModal {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.6);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Modal Box */
+  #eventModal .modal-content {
+    background: var(--card-bg);
+    color: var(--text);
+    padding: 20px;
+    border-radius: 12px;
+    width: 400px;
+    max-width: 90%;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    transition: background .3s ease, color .3s ease;
+  }
+
+  #eventModal .modal-content h2 {
+    margin-bottom: 10px;
+  }
+
+  #eventModal button.close-btn {
+    margin-top: 15px;
+    background: #e74c3c;
+    color: #fff;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background .2s ease;
+  }
+
+  #eventModal button.close-btn:hover {
+    background: #c0392b;
+  }
+
+/* 🌙 Global Input, Select, Textarea Styling */
+input, select, textarea {
+  background: var(--card-bg);   /* adapts to light/dark */
+  color: var(--text);           /* readable in both modes */
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  transition: background .3s ease, color .3s ease, border .3s ease, box-shadow .3s ease;
+}
+
+/* 🔹 Placeholder Styling */
+input::placeholder,
+textarea::placeholder {
+  color: var(--text);
+  opacity: 0.6;
+}
+
+/* 🔹 Focus State */
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--button-bg);
+  box-shadow: 0 0 6px var(--button-bg);
+}
+
+/* 🔹 Buttons */
+button, .btn {
+  background: var(--button-bg);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background .2s ease;
+}
+
+button:hover, .btn:hover {
+  background: var(--button-hover);
+}
+
+
+}
+
 
     </style>
 </head>
@@ -391,8 +490,8 @@ $events_json = json_encode($events);
           <td><?= intval($row['id']) ?></td>
           <td><?= htmlspecialchars($row['customer']) ?></td>
           <td><?= htmlspecialchars($row['date']) ?></td>
-          <td><?= htmlspecialchars($row['start_time']) ?></td>
-          <td><?= htmlspecialchars($row['end_time']) ?></td>
+          <td><?= date("g:i A", strtotime($row['start_time'])) ?></td>
+          <td><?= date("g:i A", strtotime($row['end_time'])) ?></td>
           <td><?= htmlspecialchars($row['location']) ?></td>
           <td><?= htmlspecialchars($row['status']) ?></td>
           <td><?= htmlspecialchars($row['created_at']) ?></td>
@@ -410,12 +509,12 @@ $events_json = json_encode($events);
                 <option <?= $row['status']=="Approved"?"selected":"" ?> value="Approved">Approved</option>
                 <option <?= $row['status']=="Cancelled"?"selected":"" ?> value="Cancelled">Cancelled / Expired</option>
               </select>
-              <button type="submit">💾 Save</button>
+              <button type="submit">Save</button>
             </form>
             <!-- Delete -->
             <form method="POST" style="display:inline;" onsubmit="return confirm('Delete this appointment?');">
               <input type="hidden" name="delete_id" value="<?= intval($row['id']) ?>">
-              <button type="submit">🗑️ Delete</button>
+              <button type="submit">Delete</button>
             </form>
           </td>
         </tr>
@@ -425,58 +524,126 @@ $events_json = json_encode($events);
   </div>
 
   <script>
-    function toggleForm(){
-      const f=document.getElementById("appointmentForm");
-      f.style.display=f.style.display==="block"?"none":"block";
-    }
-    function toggleTheme(){
-      document.body.classList.toggle("dark");
-      localStorage.setItem("theme",document.body.classList.contains("dark")?"dark":"light");
-    }
-    if(localStorage.getItem("theme")==="dark"){document.body.classList.add("dark");}
+function toggleForm() {
+  const f = document.getElementById("appointmentForm");
+  f.style.display = f.style.display === "block" ? "none" : "block";
+}
 
-    // Search Filter
-    document.getElementById("searchBar").addEventListener("keyup", function(){
-      let filter = this.value.toLowerCase();
-      let rows = document.querySelectorAll("table tbody tr");
-      rows.forEach(r=>{
-        let text = r.innerText.toLowerCase();
-        r.style.display = text.includes(filter) ? "" : "none";
-      });
+function toggleTheme() {
+  document.body.classList.toggle("dark");
+  localStorage.setItem("theme",
+    document.body.classList.contains("dark") ? "dark" : "light"
+  );
+}
+if (localStorage.getItem("theme") === "dark") {
+  document.body.classList.add("dark");
+}
+
+// Search Filter
+document.getElementById("searchBar").addEventListener("keyup", function () {
+  let filter = this.value.toLowerCase();
+  let rows = document.querySelectorAll("table tbody tr");
+  rows.forEach(r => {
+    let text = r.innerText.toLowerCase();
+    r.style.display = text.includes(filter) ? "" : "none";
+  });
+});
+
+// FullCalendar init
+document.addEventListener("DOMContentLoaded", function () {
+  var calendarEl = document.getElementById("calendar");
+  var calendar = new FullCalendar.Calendar(calendarEl, {
+    initialView: "dayGridMonth",
+    height: 600,
+    headerToolbar: {
+      left: "prev,next today",
+      center: "title",
+      right: "dayGridMonth,listWeek"
+    },
+    events: <?= $events_json ?>,
+    eventClick: function (info) {
+      info.jsEvent.preventDefault();
+
+      // Populate modal with details
+      document.getElementById("modalTitle").innerText = info.event.title;
+      document.getElementById("modalDate").innerText =
+        "Date: " + info.event.start.toLocaleDateString();
+      document.getElementById("modalTime").innerText =
+        "Time: " +
+        info.event.start.toLocaleTimeString([], {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true
+        }) +
+        " - " +
+        (info.event.end
+          ? info.event.end.toLocaleTimeString([], {
+              hour: "numeric",
+              minute: "2-digit",
+              hour12: true
+            })
+          : "N/A");
+
+      document.getElementById("modalLocation").innerText =
+        "Location: " + (info.event.extendedProps.location || "N/A");
+      document.getElementById("modalStatus").innerText =
+        "Status: " + (info.event.extendedProps.status || "N/A");
+
+      // Show modal centered
+      document.getElementById("eventModal").style.display = "flex";
+    }
+  });
+  calendar.render();
+});
+
+// Close modal
+function closeModal() {
+  document.getElementById("eventModal").style.display = "none";
+}
+window.onclick = function (event) {
+  let modal = document.getElementById("eventModal");
+  if (event.target == modal) {
+    modal.style.display = "none";
+  }
+};
+
+// Live Clock
+function updateClock() {
+  const now = new Date();
+  document.getElementById("clock").innerText =
+    now.toLocaleDateString() +
+    " " +
+    now.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true
     });
+}
+setInterval(updateClock, 1000);
+updateClock();
 
-    // FullCalendar init
-    document.addEventListener('DOMContentLoaded', function() {
-      var calendarEl = document.getElementById('calendar');
-      var calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridMonth',
-        height: 600,
-        headerToolbar: {
-          left: 'prev,next today',
-          center: 'title',
-          right: 'dayGridMonth,listWeek'
-        },
-        events: <?= $events_json ?>
-      });
-      calendar.render();
-    });
-
-    // Live Clock
-    function updateClock() {
-      const now = new Date();
-      document.getElementById("clock").innerText =
-        now.toLocaleDateString() + " " + now.toLocaleTimeString();
-    }
-    setInterval(updateClock, 1000);
-    updateClock();
   </script>
 
-  <?php
-  if (!empty($_SESSION['flash'])) {
-      $msg = addslashes($_SESSION['flash']);
-      echo "<script>alert('{$msg}');</script>";
-      unset($_SESSION['flash']);
-  }
-  ?>
+<?php if (!empty($_SESSION['flash'])): ?>
+  <div class="flash-msg">
+    <?= htmlspecialchars($_SESSION['flash']) ?>
+  </div>
+  <?php unset($_SESSION['flash']); ?>
+<?php endif; ?>
+
+    <div id="eventModal" style="
+      display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+      background:rgba(0,0,0,0.6); z-index:9999; 
+      display:flex; align-items:center; justify-content:center;">
+  
+      <div class="modal-content">   
+        <h2 id="modalTitle"></h2>
+        <p id="modalDate"></p>
+        <p id="modalTime"></p>
+        <p id="modalLocation"></p>
+        <p id="modalStatus"></p>
+
+      </div>
+    </div>
 </body>
 </html>

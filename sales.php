@@ -249,8 +249,14 @@ $performance = $totalRevenue > 5000 ? "Excellent 🚀" : ($totalRevenue > 1000 ?
     }
 
     .search-bar { 
-      margin: 10px 0; 
+      margin: 10px 0;
+      width: 100%;
     }
+
+    body, .card, .sidebar, #salesTable th, #salesTable td {
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+    
 
   </style>
 </head>

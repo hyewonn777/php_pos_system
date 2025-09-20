@@ -401,6 +401,32 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
     table-layout: auto;
   }
 
+  /* 🌙 Dark-mode friendly form controls */
+input, select, textarea {
+  background: var(--card-bg);
+  color: var(--text);
+  border: 1px solid var(--border, #555);
+  border-radius: 6px;
+  padding: 8px 10px;
+  width: auto;
+  transition: background .3s ease, color .3s ease, border .3s ease;
+}
+
+/* 🔹 Placeholder styling */
+input::placeholder,
+textarea::placeholder {
+  color: var(--text);
+  opacity: 0.6;
+}
+
+/* 🔹 Focus state */
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent, #3498db);
+  box-shadow: 0 0 5px var(--accent, #3498db);
+}
+
+
   </style>
 </head>
 <body>
@@ -447,7 +473,7 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
 
  <!-- Add Product + Bulk Delete -->
 <form id="productForm" enctype="multipart/form-data" method="POST" 
-      style="padding:12px; background:#fff; border:1px solid #e0e0e0; border-radius:8px; margin-bottom:16px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+      style="padding: 12px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04); flex-wrap:wrap; width:100%">
   
   <input type="text" name="category" placeholder="Category" required class="form-control" style="flex:1;">
   <input type="text" name="name" placeholder="Product Name" required class="form-control" style="flex:1;">
@@ -461,11 +487,11 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
   <!-- Bulk Delete -->
   <button type="submit" name="bulk_delete" form="stockTableForm" 
           onclick="return confirm('Are you sure you want to delete selected products?');" 
-          class="btn" style="background:#e74c3c; color:#fff;">🗑 Delete Selected</button>
+          class="btn" style="background:#e74c3c; color:#fff;">Delete Selected</button>
 </form>
 
 <!-- CSV Tools -->
-<div class="csv-tools" style="padding:12px; background:#fff; border:1px solid #e0e0e0; border-radius:8px; margin-bottom:16px;">
+<div class="csv-tools" style="padding:12px; margin-bottom:4px; width:100%">
   <form action="stock.php" method="POST" enctype="multipart/form-data" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
     <input type="file" name="csv_file" accept=".csv" class="form-control">
     <button type="submit" name="import_csv" class="btn" style="background:#3498db; color:#fff;">📥 Import</button>
@@ -545,7 +571,7 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
     </tbody>
   </table>
 </form>
-
+<div>
 <script>
   // toggle edit rows
   function toggleEdit(id) {
@@ -559,8 +585,24 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
     document.querySelectorAll('input[name="selected[]"]').forEach(cb => cb.checked = this.checked);
   });
 </script>
+  <script>
+    function toggleTheme() {
+      document.body.classList.toggle("dark");
+      localStorage.setItem("theme", document.body.classList.contains("dark") ? "dark" : "light");
+    }
+    if (localStorage.getItem("theme") === "dark") {
+      document.body.classList.add("dark");
+    }
+  </script>
 
-
-
+  <script>
+    function updateClock() {
+      const now = new Date();
+      document.getElementById("clock").innerText =
+    now.toLocaleDateString() + " " + now.toLocaleTimeString();
+    }
+    setInterval(updateClock, 1000);
+      updateClock();
+  </script>
 </body>
 </html>
