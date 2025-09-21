@@ -521,7 +521,6 @@ button:hover, .btn:hover {
       </tbody>
     </table>
   </div>
-
   <script>
 function toggleForm() {
   const f = document.getElementById("appointmentForm");

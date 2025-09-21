@@ -586,7 +586,6 @@ input:focus, select:focus, textarea:focus {
             </form>
           </td>
         </tr>
-
         <?php
             endwhile;
         else:
