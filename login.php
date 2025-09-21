@@ -2,46 +2,28 @@
 session_start();
 require 'db.php';
 
-// Already logged in → go to index
-if (isset($_SESSION['admin'])) {
-    header("Location: index.php");
-    exit();
-}
-
-$error = "";
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username']);
     $password = trim($_POST['password']);
 
-    /* -------------------- ADMIN LOGIN -------------------- */
-    $stmt = $conn->prepare("SELECT * FROM admin WHERE username = ? LIMIT 1");
+    $stmt = $conn->prepare("SELECT * FROM users WHERE username = ? LIMIT 1");
     $stmt->bind_param("s", $username);
     $stmt->execute();
-    $admin = $stmt->get_result()->fetch_assoc();
+    $user = $stmt->get_result()->fetch_assoc();
 
-    if ($admin && hash('sha256', $password) === $admin['password_hash']) {
-        $_SESSION['admin'] = $admin['username'];
+    if ($user && hash('sha256', $password) === $user['password_hash']) {
+        $_SESSION['user_id'] = $user['id'];
+        $_SESSION['username'] = $user['username'];
+        $_SESSION['role'] = $user['role'];
         header("Location: index.php");
         exit();
+    } else {
+        $error = "❌ Invalid username or password!";
     }
-
-    /* -------------------- PHOTOGRAPHER LOGIN -------------------- */
-    $stmt = $conn->prepare("SELECT * FROM photographer WHERE username = ? LIMIT 1");
-    $stmt->bind_param("s", $username);
-    $stmt->execute();
-    $photographer = $stmt->get_result()->fetch_assoc();
-
-    if ($photographer && hash('sha256', $password) === $photographer['password_hash']) {
-        $_SESSION['photographer'] = $photographer['username'];
-        header("Location: index.php");
-        exit();
-    }
-
-    // If both fail
-    $error = "Invalid username or password!";
 }
+
 ?>
+
 
 <!DOCTYPE html>
 <html lang="en">

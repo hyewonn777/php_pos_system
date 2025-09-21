@@ -15,7 +15,7 @@
     --bg: #0f172a;
     --text: #e5e7eb;
     --muted: #a1a1aa;
-    --card: #111827;
+    --card: #00000000;
     --border: #1f2937;
     --brand: #60a5fa;
     --brand-2: #3b82f6;
@@ -41,7 +41,7 @@ body {
 /* Sidebar */
 .sidebar {
     width: 240px;
-    background: var(--brand);
+    background: #ffffff;
     color: #fff;
     height: 100vh;
     position: fixed;
@@ -159,7 +159,7 @@ form.inline-form {
 input[type="text"], input[type="number"], input[type="date"], select, textarea {
     background: #00000000;
     color: var(--text);
-    border: 1px solid #ffffff;
+    border: 1px solid #999898;
     border-radius: 8px;
     padding: 10px 12px;
 }

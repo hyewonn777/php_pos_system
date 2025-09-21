@@ -1,6 +1,6 @@
 ﻿<?php
 session_start();
-require 'db.php'; // mysqli connection
+require 'db.php';
 
 /* ----------------- SUMMARY TABLE ----------------- */
 $check = $conn->query("SELECT id FROM summary WHERE id=1");
@@ -8,86 +8,145 @@ if ($check->num_rows === 0) {
     $conn->query("INSERT INTO summary (id, total_sales, total_revenue) VALUES (1, 0, 0)");
 }
 
-/* -------------------- CREATE -------------------- */
+/* -------------------- CREATE SALE -------------------- */
 if (isset($_POST['add_sale'])) {
+    $sale_date = $_POST['sale_date'];
+    $product   = $_POST['product'];
+    $quantity  = intval($_POST['quantity']);
+    $total     = floatval($_POST['total']);
+
     $stmt = $conn->prepare("INSERT INTO sales (sale_date, product, quantity, total) VALUES (?, ?, ?, ?)");
-    if (!$stmt) die("Prepare failed: " . $conn->error);
+    if ($stmt) {
+        $stmt->bind_param("ssid", $sale_date, $product, $quantity, $total);
+        $stmt->execute();
+        $stmt->close();
 
-    $sale_date = $_POST['sale_date'];
-    $product   = $_POST['product'];
-    $quantity  = intval($_POST['quantity']);
-    $total     = floatval($_POST['total']);
-
-    $stmt->bind_param("ssid", $sale_date, $product, $quantity, $total);
-    $stmt->execute();
-    $stmt->close();
+        $stmt = $conn->prepare("UPDATE stock SET qty = qty - ? WHERE name=?");
+        if ($stmt) {
+            $stmt->bind_param("is", $quantity, $product);
+            $stmt->execute();
+            $stmt->close();
+        }
+    }
     header("Location: sales.php");
     exit;
 }
 
-/* -------------------- UPDATE -------------------- */
-if (isset($_POST['update_sale'])) {
-    $stmt = $conn->prepare("UPDATE sales SET sale_date=?, product=?, quantity=?, total=? WHERE id=?");
-    if (!$stmt) die("Prepare failed: " . $conn->error);
+/* -------------------- BATCH UPDATE -------------------- */
+if (isset($_POST['update_selected']) && !empty($_POST['selected_sales'])) {
+    foreach ($_POST['selected_sales'] as $sale_id) {
+        $sale_id = intval($sale_id);
+        $new_qty = intval($_POST['quantity'][$sale_id] ?? 0);
 
-    $sale_date = $_POST['sale_date'];
-    $product   = $_POST['product'];
-    $quantity  = intval($_POST['quantity']);
-    $total     = floatval($_POST['total']);
-    $id        = intval($_POST['id']);
+        $stmt = $conn->prepare("SELECT product, quantity, total FROM sales WHERE id=?");
+        if ($stmt) {
+            $stmt->bind_param("i", $sale_id);
+            $stmt->execute();
+            $stmt->bind_result($product, $old_qty, $old_total);
+            $stmt->fetch();
+            $stmt->close();
 
-    $stmt->bind_param("ssidi", $sale_date, $product, $quantity, $total, $id);
-    $stmt->execute();
-    $stmt->close();
+            $qty_diff = $new_qty - $old_qty;
+
+            $stmt = $conn->prepare("UPDATE stock SET qty = qty - ? WHERE name=?");
+            if ($stmt) {
+                $stmt->bind_param("is", $qty_diff, $product);
+                $stmt->execute();
+                $stmt->close();
+            }
+
+            $price_per_unit = $old_qty > 0 ? $old_total / $old_qty : 0;
+            $new_total = $price_per_unit * $new_qty;
+
+            $stmt = $conn->prepare("UPDATE sales SET quantity=?, total=? WHERE id=?");
+            if ($stmt) {
+                $stmt->bind_param("idi", $new_qty, $new_total, $sale_id);
+                $stmt->execute();
+                $stmt->close();
+            }
+        }
+    }
     header("Location: sales.php");
     exit;
 }
 
-/* -------------------- DELETE -------------------- */
-if (isset($_POST['delete_sale'])) {
-    $stmt = $conn->prepare("DELETE FROM sales WHERE id=?");
-    if (!$stmt) die("Prepare failed: " . $conn->error);
+/* -------------------- BATCH DELETE -------------------- */
+if (isset($_POST['delete_selected']) && !empty($_POST['selected_sales'])) {
+    foreach ($_POST['selected_sales'] as $sale_id) {
+        $sale_id = intval($sale_id);
 
-    $id = intval($_POST['id']); // variable first
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-    $stmt->close();
+        $stmt = $conn->prepare("SELECT product, quantity FROM sales WHERE id=?");
+        if ($stmt) {
+            $stmt->bind_param("i", $sale_id);
+            $stmt->execute();
+            $stmt->bind_result($product, $qty);
+            $stmt->fetch();
+            $stmt->close();
+
+            $stmt = $conn->prepare("UPDATE stock SET qty = qty + ? WHERE name=?");
+            if ($stmt) {
+                $stmt->bind_param("is", $qty, $product);
+                $stmt->execute();
+                $stmt->close();
+            }
+
+            $stmt = $conn->prepare("DELETE FROM sales WHERE id=?");
+            if ($stmt) {
+                $stmt->bind_param("i", $sale_id);
+                $stmt->execute();
+                $stmt->close();
+            }
+        }
+    }
     header("Location: sales.php");
     exit;
 }
-
-/* -------------------- MANUAL SUMMARY -------------------- */
-if (isset($_POST['update_summary'])) {
-    $stmt = $conn->prepare("UPDATE summary SET total_sales=?, total_revenue=? WHERE id=1");
-    if (!$stmt) die("Prepare failed: " . $conn->error);
-
-    $manual_sales   = floatval($_POST['manual_sales']);
-    $manual_revenue = floatval($_POST['manual_revenue']);
-
-    $stmt->bind_param("dd", $manual_sales, $manual_revenue);
-    $stmt->execute();
-    $stmt->close();
-    header("Location: sales.php");
-    exit;
-}
-
 
 /* -------------------- READ SALES -------------------- */
-$result = $conn->query("SELECT * FROM sales ORDER BY sale_date DESC");
-if (!$result) die("Query failed: " . $conn->error);
-
+$result = $conn->query("SELECT id, product, quantity, total, sale_date FROM sales ORDER BY sale_date DESC");
 $sales = [];
-$totalSales = $totalRevenue = 0;
+$totalSales = 0;
+$skuMargins = [];
+
 while ($row = $result->fetch_assoc()) {
     $sales[] = $row;
     $totalSales += floatval($row['total']);
-    $totalRevenue += floatval($row['total']) * 0.9; // let's assume there's a 10% cost
-} //
-$result->free();
-$transactions = count($sales);
 
-/* -------------------- PERFORMANCE -------------------- */
-$performance = $totalRevenue > 5000 ? "Excellent 🚀" : ($totalRevenue > 1000 ? "Good 👍" : "Needs Improvement ⚠️");
+    $sku = $row['product'];
+    $profit = $row['total'] * 0.1; // 10% profit assumed
+    if (!isset($skuMargins[$sku])) $skuMargins[$sku] = ['profit'=>0,'discount'=>0];
+    $skuMargins[$sku]['profit'] += $profit;
+}
+
+/* -------------------- READ DISCOUNT & LEVEL -------------------- */
+foreach ($skuMargins as $sku => &$data) {
+    $stmt = $conn->prepare("SELECT discount FROM stock WHERE name=? LIMIT 1");
+    if ($stmt) {
+        $stmt->bind_param("s", $sku);
+        $stmt->execute();
+        $stmt->bind_result($disc);
+        $data['discount'] = $stmt->fetch() ? $disc : 0;
+        $stmt->close();
+    } else {
+        $data['discount'] = 0;
+    }
+
+    // Apply admin discount + 20% global discount
+    $data['profit_after_discount'] = $data['profit'] * (1 - $data['discount']/100) * 0.8;
+
+    if ($data['profit_after_discount'] >= 5000) $data['level'] = "High";
+    elseif ($data['profit_after_discount'] >= 1000) $data['level'] = "Medium";
+    else $data['level'] = "Low";
+}
+unset($data);
+
+/* -------------------- SUMMARY CALCULATIONS -------------------- */
+$grossSales = $totalSales;                 // sum of all sales totals
+$globalDiscountPercent = 10;               // 10% discount for net sales (assume rani ahak)
+$discountAmount = $grossSales * $globalDiscountPercent / 100;
+$netSales = $grossSales - $discountAmount;
+
+$totalProfitAfterDiscount = array_sum(array_column($skuMargins,'profit_after_discount'));
 ?>
 
 <!DOCTYPE html>
@@ -257,119 +316,154 @@ $performance = $totalRevenue > 5000 ? "Excellent 🚀" : ($totalRevenue > 1000 ?
       transition: background-color 0.3s ease, color 0.3s ease;
     }
     
+    /* Summary Cards */
+    .summary { display:flex; gap:20px; margin:20px 0; }
+    .summary .card { flex:1; padding:20px; border-radius:10px; text-align:center; background:#fff; font-size:20px; font-weight:bold; }
+    /* Table */
+    #salesTable, #skuTable { width:100%; border-collapse:collapse; margin-top:20px; }
+    #salesTable th, #salesTable td, #skuTable th, #skuTable td { border:1px solid #e3e3e3; padding:12px; text-align:left; }
+    #salesTable th, #skuTable th { background:#f4f4f4; font-weight:bold; }
+    .search-bar { margin:10px 0; width:100%; }
 
   </style>
 </head>
 <body>
-
-  <div class="sidebar">
+   <div class="sidebar">
     <h2>Admin Panel</h2>
-    <div class="logo-box"><img src="images/rsz_logo.png" alt="Logo"></div>
+    <div class="logo-box">
+        <img src="images/rsz_logo.png" alt="Logo">
+    </div>
     <ul>
       <li><a href="index.php">Dashboard</a></li>
-      <li><a href="sales.php" class="active">Sales & Tracking</a></li>
-      <li><a href="stock.php">Product / Stock</a></li>
-      <li><a href="appointment.php">Appointments / Booking</a></li>
+      <li><a href="sales.php">Sales Tracking</a></li>
       <li><a href="orders.php">Order Tracking</a></li>
-      <li><a href="user_management.php">Account Management</a></li>
+      <li><a href="stock.php">Inventory</a></li>
+      <li><a href="appointment.php">Appointments</a></li>
+      <li><a href="user_management.php">Account</a></li>
     </ul>
     <div class="logout">
-      <form action="logout.php" method="POST"><button type="submit">Logout</button></form>
+      <form action="logout.php" method="POST">
+        <button type="submit">Logout</button>
+      </form>
     </div>
   </div>
 
   <div class="content">
     <div class="topbar">
-      <div id="clock" style="margin-right:auto;"></div>
+      <div id="clock" style="margin-right:auto; font-weight:bold; font-size:16px;"></div>
       <button class="toggle-btn" onclick="toggleTheme()">Toggle Dark Mode</button>
     </div>
-
     <h1>Sales & Tracking</h1>
     <p>Track revenue and sales performance</p><br>
 
-    <!-- Summary -->
+    <!-- Updated Summary -->
     <div class="summary">
-      <div class="card"><b>Total Sales: </b><?= number_format($totalSales, 2) ?></div>
-      <div class="card"><b>Revenue: </b><?= number_format($totalRevenue, 2) ?></div>
+      <div class="card"><b>Gross Sales:</b><br>₱<?= number_format($grossSales,2) ?></div>
+      <div class="card"><b>Discount:</b><br>₱<?= number_format($discountAmount,2) ?></div>
+      <div class="card"><b>Net Sales:</b><br>₱<?= number_format($netSales,2) ?></div>
     </div>
 
-    <!-- Search -->
-    <input type="text" id="searchInput" class="search-bar" placeholder="🔍 Search product/date...">
 
-    <!-- Add Sale Form -->
-    <form method="POST" style="margin-bottom:20px;">
-      <input type="date" name="sale_date" required>
-      <input type="text" name="product" placeholder="Product" required>
-      <input type="number" name="quantity" placeholder="Quantity" required>
-      <input type="number" step="0.01" name="total" placeholder="Total ₱" required>
-      <button type="submit" name="add_sale">Add Sale</button>
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+  <button type="submit" name="delete_selected" style="padding:5px 10px; background:#e74c3c; color:white; border:none; border-radius:5px; cursor:pointer;" 
+          onclick="return confirm('Delete selected sales?');">Delete Selected</button>
+</div>
+    <form method="POST">
+    <table id="salesTable">
+    <thead>
+    <tr>
+      <th><input type="checkbox" id="selectAll"></th>
+      <th>Date</th>
+      <th>Product</th>
+      <th>Quantity</th>
+      <th>Total</th>
+
+      <th>Profit</th>
+      <th>Profit After Discount</th>
+      <th>Level</th>
+    </tr>
+    </thead>
+    <tbody>
+    <?php foreach($sales as $row): 
+      $sku = $row['product'];
+      $profit = $skuMargins[$sku]['profit'] ?? 0;
+      $discount = $skuMargins[$sku]['discount'] ?? 0;
+      $profitAfter = $skuMargins[$sku]['profit_after_discount'] ?? $profit;
+      $level = $skuMargins[$sku]['level'] ?? 'Low';
+    ?>
+    <tr>
+      <td>
+        <input type="checkbox" name="selected_sales[]" value="<?= $row['id'] ?>">
+
+      </td>
+      <td><?= htmlspecialchars($row['sale_date']) ?></td>
+      <td><?= htmlspecialchars($sku) ?></td>
+      <td><input type="number" name="quantity[<?= $row['id'] ?>]" value="<?= $row['quantity'] ?>" min="1"></td>
+      <td>₱<?= number_format($row['total'],2) ?></td>
+      <td>₱<?= number_format($profit,2) ?></td>
+      <td>₱<?= number_format($profitAfter,2) ?></td>
+      <td><?= $level ?></td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+    </table>
+    </div>
     </form>
 
-    <!-- Sales Table -->
-    <table id="salesTable">
-      <tr>
-        <th>Date</th>
-        <th>Product</th>
-        <th>Quantity</th>
-        <th>Total</th>
-        <th>Action</th>
-      </tr>
-      <?php foreach ($sales as $row): ?>
-        <tr>
-          <td><?= htmlspecialchars($row['sale_date']) ?></td>
-          <td><?= htmlspecialchars($row['product']) ?></td>
-          <td><?= htmlspecialchars($row['quantity']) ?></td>
-          <td>₱<?= number_format($row['total'], 2) ?></td>
-          <td>
-            <button onclick="toggleEdit(<?= $row['id'] ?>)">Edit</button>
-            <form method="POST" style="display:inline;">
-              <input type="hidden" name="id" value="<?= $row['id'] ?>">
-              <button type="submit" name="delete_sale" onclick="return confirm('Are you sure?');">🗑️ Delete</button>
-            </form>
-          </td>
-        </tr>
-        <tr id="editRow<?= $row['id'] ?>" class="edit-row" style="display:none;">
-          <td colspan="5">
-            <form method="POST">
-              <input type="hidden" name="id" value="<?= $row['id'] ?>">
-              <input type="date" name="sale_date" value="<?= $row['sale_date'] ?>" required>
-              <input type="text" name="product" value="<?= $row['product'] ?>" required>
-              <input type="number" name="quantity" value="<?= $row['quantity'] ?>" required>
-              <input type="number" step="0.01" name="total" value="<?= $row['total'] ?>" required>
-              <button type="submit" name="update_sale">Save</button>
-              <button type="button" onclick="toggleEdit(<?= $row['id'] ?>)">Cancel</button>
-            </form>
-          </td>
-        </tr>
-      <?php endforeach; ?>
-    </table>
-  </div>
-
   <script>
-    function toggleTheme() {
-      document.body.classList.toggle("dark");
-      localStorage.setItem("theme", document.body.classList.contains("dark") ? "dark" : "light");
-    }
-    if (localStorage.getItem("theme") === "dark") document.body.classList.add("dark");
+    document.addEventListener("DOMContentLoaded", function() {
+        // --- Real-time Clock ---
+        function updateClock() {
+            const now = new Date();
+            document.getElementById("clock").innerText =
+                now.toLocaleDateString() + " " + now.toLocaleTimeString();
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
 
-    function updateClock() {
-      const now = new Date();
-      document.getElementById("clock").innerText = now.toLocaleDateString() + " " + now.toLocaleTimeString();
-    }
-    setInterval(updateClock, 1000); updateClock();
+        // --- Toggle Dark Mode ---
+        const toggleBtn = document.querySelector(".toggle-btn");
+        if (toggleBtn) {
+            toggleBtn.addEventListener("click", function() {
+                document.body.classList.toggle("dark");
+                localStorage.setItem(
+                    "theme",
+                    document.body.classList.contains("dark") ? "dark" : "light"
+                );
+            });
+        }
+        if (localStorage.getItem("theme") === "dark") {
+            document.body.classList.add("dark");
+        }
 
-    function toggleEdit(id) {
-      const row = document.getElementById("editRow" + id);
-      row.style.display = row.style.display === "none" ? "table-row" : "none";
-    }
+        // --- Toggle Edit Row ---
+        window.toggleEdit = function(id) {
+            const row = document.getElementById("editRow" + id);
+            if (row) {
+                row.style.display = row.style.display === "none" ? "table-row" : "none";
+            }
+        }
 
-    // Instant search
-    document.getElementById("searchInput").addEventListener("keyup", function() {
-      const filter = this.value.toLowerCase();
-      document.querySelectorAll("#salesTable tr:not(:first-child)").forEach(r => {
-        r.style.display = r.innerText.toLowerCase().includes(filter) ? "" : "none";
-      });
+        // --- Instant Search ---
+        const searchInput = document.getElementById("searchInput");
+        if (searchInput) {
+            searchInput.addEventListener("keyup", function() {
+                const filter = this.value.toLowerCase();
+                document.querySelectorAll("#salesTable tbody tr").forEach(r => {
+                    r.style.display = r.innerText.toLowerCase().includes(filter) ? "" : "none";
+                });
+            });
+        }
+
+        // --- Select/Deselect All Checkboxes ---
+        const selectAll = document.getElementById("selectAll");
+        if (selectAll) {
+            selectAll.addEventListener("change", function() {
+                const checkboxes = document.querySelectorAll('input[name="selected_sales[]"]');
+                checkboxes.forEach(cb => cb.checked = this.checked);
+            });
+        }
     });
-  </script>
+</script>
 </body>
 </html>

@@ -402,7 +402,6 @@ button:hover, .btn:hover {
 
 }
 
-
     </style>
 </head>
 <body>
@@ -413,11 +412,11 @@ button:hover, .btn:hover {
     </div>
     <ul>
       <li><a href="index.php">Dashboard</a></li>
-      <li><a href="sales.php">Sales & Tracking</a></li>
-      <li><a href="stock.php">Product / Stock</a></li>
-      <li><a href="appointment.php">Appointments / Booking</a></li>
+      <li><a href="sales.php">Sales Tracking</a></li>
       <li><a href="orders.php">Order Tracking</a></li>
-      <li><a href="user_management.php">Account Management</a></li>
+      <li><a href="stock.php">Inventory</a></li>
+      <li><a href="appointment.php">Appointments</a></li>
+      <li><a href="user_management.php">Account</a></li>
     </ul>
     <div class="logout">
       <form action="logout.php" method="POST">

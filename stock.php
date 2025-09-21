@@ -1,85 +1,44 @@
 ﻿<?php
-/* stock.php - updated: keep style, remove delete-all, fix errors */
 require 'auth.php';
 require 'db.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Show all PHP errors while debugging (remove in production)
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 
-    // UPDATE (edit)
-    if (isset($_POST['update_product']) && isset($_POST['edit_id'])) {
-        $id = intval($_POST['edit_id']);
-        $category = trim($_POST['category']);
-        $name     = trim($_POST['name']);
-        $qty      = intval($_POST['qty']);
-        $price    = floatval($_POST['price']);
+/* ---------------- API MODE ---------------- */
+if (isset($_GET['api']) && $_GET['api'] === '1') {
+    $products = [];
+$res = $conn->query("SELECT SUM(qty) AS total_qty, SUM(price*qty) AS total_value FROM stock WHERE status='active'");
+    while ($row = $res->fetch_assoc()) {
+        $products[] = $row;
+    }
+    header('Content-Type: application/json');
+    echo json_encode($products);
+    exit;
+}
 
-        // get current image_path
-        $dbPath = '';
-        $res = $conn->prepare("SELECT image_path FROM stock WHERE id = ?");
-        if ($res) {
-            $res->bind_param("i", $id);
-            $res->execute();
-            $res->bind_result($dbPathFromDb);
-            $res->fetch();
-            $res->close();
-            if (!empty($dbPathFromDb)) $dbPath = $dbPathFromDb;
-        }
+/* ------------------ BULK DELETE (Soft Delete) ------------------ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_delete'])) {
+    if (!empty($_POST['selected']) && is_array($_POST['selected'])) {
+        $ids = array_map('intval', $_POST['selected']); // sanitize ints
+        $in = implode(',', $ids);
 
-        // optional image upload
-        if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
-            $uploadsDir = __DIR__ . '/uploads/';
-            if (!is_dir($uploadsDir)) mkdir($uploadsDir, 0755, true);
-
-            $originalName = basename($_FILES['image']['name']);
-            $ext = pathinfo($originalName, PATHINFO_EXTENSION);
-            $safeBase = time() . '_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', pathinfo($originalName, PATHINFO_FILENAME));
-            $fileName = $safeBase . ($ext ? '.' . $ext : '');
-            $targetFile = $uploadsDir . $fileName;
-
-            if (move_uploaded_file($_FILES['image']['tmp_name'], $targetFile)) {
-                // remove old image if exists
-                if (!empty($dbPath) && file_exists(__DIR__ . '/' . $dbPath)) {
-                    @unlink(__DIR__ . '/' . $dbPath);
-                }
-                $dbPath = 'uploads/' . $fileName;
-            }
-        }
-
-        $stmt = $conn->prepare("UPDATE stock SET category=?, name=?, qty=?, price=?, image_path=? WHERE id=?");
-        if ($stmt) {
-            $stmt->bind_param("ssidsi", $category, $name, $qty, $price, $dbPath, $id);
-            if ($stmt->execute()) {
-                $_SESSION['flash'] = "Product updated successfully!";
+        if ($in !== '') {
+            // Mark as inactive instead of deleting
+            $sql = "UPDATE stock SET status='inactive' WHERE id IN ($in)";
+            if ($conn->query($sql)) {
+                $_SESSION['flash'] = count($ids) . " product(s) marked inactive successfully!";
             } else {
-                $_SESSION['flash'] = "Update error: " . $stmt->error;
+                $_SESSION['flash'] = "Error updating status: " . $conn->error;
             }
-            $stmt->close();
         } else {
-            $_SESSION['flash'] = "Update prepare failed: " . $conn->error;
+            $_SESSION['flash'] = "Invalid selection.";
         }
-
-        header("Location: stock.php");
-        exit;
-    }
-
-    // BULK DELETE
-if (isset($_POST['bulk_delete']) && !empty($_POST['selected'])) {
-    $ids = array_map('intval', $_POST['selected']);
-    $in  = implode(',', $ids);
-
-    // remove images first
-    $imgQ = $conn->query("SELECT image_path FROM stock WHERE id IN ($in)");
-    while ($img = $imgQ->fetch_assoc()) {
-        if (!empty($img['image_path']) && file_exists(__DIR__ . '/' . $img['image_path'])) {
-            @unlink(__DIR__ . '/' . $img['image_path']);
-        }
-    }
-
-    if ($conn->query("DELETE FROM stock WHERE id IN ($in)")) {
-        $_SESSION['flash'] = "Selected products deleted successfully!";
     } else {
-        $_SESSION['flash'] = "Error deleting selected: " . $conn->error;
+        $_SESSION['flash'] = "Please select at least one product.";
     }
 
     header("Location: stock.php");
@@ -87,157 +46,228 @@ if (isset($_POST['bulk_delete']) && !empty($_POST['selected'])) {
 }
 
 
-    // ADD product
-    if (isset($_POST['add_product'])) {
-        if (isset($_POST['category'], $_POST['name'], $_POST['qty'], $_POST['price'])) {
 
-            $category = trim($_POST['category']);
-            $name     = trim($_POST['name']);
-            $qty      = intval($_POST['qty']);
-            $price    = floatval($_POST['price']);
-            $dbPath   = '';
+/* ------------------ UPDATE PRODUCT ------------------ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
+    $id = intval($_POST['edit_id'] ?? 0);
+    if ($id <= 0) {
+        $_SESSION['flash'] = "Invalid product id.";
+        header("Location: stock.php"); exit;
+    }
 
-            if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
-                $uploadsDir = __DIR__ . '/uploads/';
-                if (!is_dir($uploadsDir)) mkdir($uploadsDir, 0755, true);
+    $category = trim($_POST['category'] ?? '');
+    $name     = trim($_POST['name'] ?? '');
+    $qty      = intval($_POST['qty'] ?? 0);
+    $price    = floatval($_POST['price'] ?? 0);
 
-                $originalName = basename($_FILES['image']['name']);
-                $ext = pathinfo($originalName, PATHINFO_EXTENSION);
-                $safeBase = time() . '_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', pathinfo($originalName, PATHINFO_FILENAME));
-                $fileName = $safeBase . ($ext ? '.' . $ext : '');
-                $targetFile = $uploadsDir . $fileName;
+    // Get current image path
+    $currentImg = '';
+    $sel = $conn->prepare("SELECT image_path FROM stock WHERE id = ?");
+    if ($sel) {
+        $sel->bind_param("i", $id);
+        $sel->execute();
+        $sel->bind_result($currentImg);
+        $sel->fetch();
+        $sel->close();
+    }
 
-                if (move_uploaded_file($_FILES['image']['tmp_name'], $targetFile)) {
-                    $dbPath = 'uploads/' . $fileName;
-                }
+    // Handle image upload (optional)
+    $dbImagePath = $currentImg;
+    if (isset($_FILES['image']) && isset($_FILES['image']['tmp_name']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+        $uploadsDir = __DIR__ . '/uploads/';
+        if (!is_dir($uploadsDir)) mkdir($uploadsDir, 0755, true);
+
+        $originalName = basename($_FILES['image']['name']);
+        $ext = pathinfo($originalName, PATHINFO_EXTENSION);
+        $safeBase = time() . '_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', pathinfo($originalName, PATHINFO_FILENAME));
+        $fileName = $safeBase . ($ext ? '.' . $ext : '');
+        $targetFile = $uploadsDir . $fileName;
+
+        if (move_uploaded_file($_FILES['image']['tmp_name'], $targetFile)) {
+            // delete old image if present
+            if (!empty($currentImg) && file_exists(__DIR__ . '/' . $currentImg)) {
+                @unlink(__DIR__ . '/' . $currentImg);
             }
+            $dbImagePath = 'uploads/' . $fileName;
+        }
+    }
 
-            $stmt = $conn->prepare("INSERT INTO stock (category, name, qty, price, image_path, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
-            if ($stmt) {
-                $stmt->bind_param("ssids", $category, $name, $qty, $price, $dbPath);
-                if ($stmt->execute()) {
-                    $_SESSION['flash'] = "Product added successfully!";
-                } else {
-                    $_SESSION['flash'] = "Error inserting product: " . $stmt->error;
-                    if (!empty($dbPath) && file_exists(__DIR__ . '/' . $dbPath)) @unlink(__DIR__ . '/' . $dbPath);
-                }
-                $stmt->close();
-            } else {
-                $_SESSION['flash'] = "Insert prepare failed: " . $conn->error;
-            }
+    // Update row with prepared statement
+    $stmt = $conn->prepare("UPDATE stock SET category = ?, name = ?, qty = ?, price = ?, image_path = ? WHERE id = ?");
+    if ($stmt) {
+        $stmt->bind_param("ssidsi", $category, $name, $qty, $price, $dbImagePath, $id);
+        if ($stmt->execute()) {
+            $_SESSION['flash'] = "Product updated successfully!";
         } else {
-            $_SESSION['flash'] = "Missing required fields for add.";
+            $_SESSION['flash'] = "Update error: " . $stmt->error;
         }
-
-        header("Location: stock.php");
-        exit;
+        $stmt->close();
+    } else {
+        $_SESSION['flash'] = "DB prepare failed: " . $conn->error;
     }
 
-    // IMPORT CSV
-    if (isset($_POST['import_csv']) && isset($_FILES['csv_file']) && $_FILES['csv_file']['error'] === UPLOAD_ERR_OK) {
-        $tmp = $_FILES['csv_file']['tmp_name'];
-        if (($handle = fopen($tmp, 'r')) !== false) {
-            $header = fgetcsv($handle);
-            if ($header === false) {
-                $_SESSION['flash'] = "CSV file appears empty.";
-                fclose($handle);
-                header("Location: stock.php"); exit;
-            }
+    header("Location: stock.php");
+    exit;
+}
 
-            // normalize header names -> map to indices (accept qty or quantity)
-            $map = [];
-            foreach ($header as $i => $h) {
-                $hn = strtolower(trim($h));
-                $map[$hn] = $i;
-            }
+/* ------------------ ADD PRODUCT ------------------ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_product'])) {
+    $category = trim($_POST['category'] ?? '');
+    $name     = trim($_POST['name'] ?? '');
+    $qty      = intval($_POST['qty'] ?? 0);
+    $price    = floatval($_POST['price'] ?? 0);
+    $dbPath   = '';
 
-            // require category and name and price (qty optional)
-            if (!isset($map['category']) || !isset($map['name']) || !isset($map['price'])) {
-                $_SESSION['flash'] = "CSV header must contain: category, name, price (qty/image optional).";
-                fclose($handle);
-                header("Location: stock.php"); exit;
-            }
+    if (isset($_FILES['image']) && isset($_FILES['image']['tmp_name']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+        $uploadsDir = __DIR__ . '/uploads/';
+        if (!is_dir($uploadsDir)) mkdir($uploadsDir, 0755, true);
 
-            $inserted = 0;
-            $stmt = $conn->prepare("INSERT INTO stock (category, name, qty, price, image_path, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
-            if (!$stmt) {
-                $_SESSION['flash'] = "Prepare failed: " . $conn->error;
-                fclose($handle);
-                header("Location: stock.php"); exit;
-            }
+        $originalName = basename($_FILES['image']['name']);
+        $ext = pathinfo($originalName, PATHINFO_EXTENSION);
+        $safeBase = time() . '_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', pathinfo($originalName, PATHINFO_FILENAME));
+        $fileName = $safeBase . ($ext ? '.' . $ext : '');
+        $targetFile = $uploadsDir . $fileName;
 
-            while (($row = fgetcsv($handle, 10000, ",")) !== false) {
-                if (count($row) === 1 && trim($row[0]) === '') continue;
-
-                $category = trim($row[$map['category']] ?? '');
-                $name     = trim($row[$map['name']] ?? '');
-                $price    = floatval($row[$map['price']] ?? 0);
-                // qty: prefer 'qty' then 'quantity' header
-                if (isset($map['qty'])) {
-                    $qty = intval($row[$map['qty']] ?? 0);
-                } elseif (isset($map['quantity'])) {
-                    $qty = intval($row[$map['quantity']] ?? 0);
-                } else {
-                    $qty = 0;
-                }
-                $image    = '';
-                if (isset($map['image'])) $image = trim($row[$map['image']] ?? '');
-
-                if ($category === '' && $name === '') continue;
-
-                $stmt->bind_param("ssids", $category, $name, $qty, $price, $image);
-                if ($stmt->execute()) $inserted++;
-            }
-            $stmt->close();
-            fclose($handle);
-            $_SESSION['flash'] = "CSV import finished. Rows inserted: {$inserted}";
-        } else {
-            $_SESSION['flash'] = "Failed to open CSV file.";
+        if (move_uploaded_file($_FILES['image']['tmp_name'], $targetFile)) {
+            $dbPath = 'uploads/' . $fileName;
         }
-        header("Location: stock.php");
-        exit;
     }
 
-    // EXPORT CSV
-    if (isset($_POST['export_csv'])) {
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename=stock_export.csv');
-        $output = fopen("php://output", "w");
-        fputcsv($output, ['ID', 'Category', 'Name', 'Qty', 'Price', 'Created At']);
-
-        $result = $conn->query("SELECT id, category, name, qty, price, created_at FROM stock ORDER BY id ASC");
-        while ($row = $result->fetch_assoc()) {
-            fputcsv($output, [
-                $row['id'],
-                $row['category'],
-                $row['name'],
-                $row['qty'],
-                $row['price'],
-                $row['created_at']
-            ]);
-        }
-        fclose($output);
-        exit;
+    $stmt = $conn->prepare("INSERT INTO stock (category, name, qty, price, image_path) VALUES (?, ?, ?, ?, ?)");
+    if ($stmt) {
+        $stmt->bind_param("ssids", $category, $name, $qty, $price, $dbPath);
+        $stmt->execute();
+        $stmt->close();
+    } else {
+        $_SESSION['flash'] = "DB prepare failed: " . $conn->error;
+        header("Location: stock.php"); exit;
     }
 
-    // GENERATE TEMPLATE
-    if (isset($_POST['generate_template'])) {
-        header('Content-Type: text/csv; charset=utf-8');
-        header('Content-Disposition: attachment; filename=stock_template.csv');
-        $out = fopen('php://output', 'w');
-        fputcsv($out, ['Category', 'Name', 'Qty', 'Price', 'Image']);
-        // sample rows
-        fputcsv($out, ['Beverage', 'Coke', '10', '20.00', 'uploads/sample.jpg']);
-        fputcsv($out, ['Snack', 'Chips', '15', '15.00', 'uploads/sample2.jpg']);
-        fclose($out);
-        exit;
-    }
-} // end POST
+    $_SESSION['flash'] = "Product added successfully!";
+    header("Location: stock.php");
+    exit;
+}
 
-// READ ALL
-$result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
+/* ------------------ IMPORT CSV (robust) ------------------ */
+if (isset($_POST['import_csv'])) {
+    if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
+        $err = $_FILES['csv_file']['error'] ?? 'no_file';
+        $_SESSION['flash'] = "CSV upload failed (error code: {$err}).";
+        header("Location: stock.php"); exit;
+    }
+
+    $tmp = $_FILES['csv_file']['tmp_name'];
+    $contents = file_get_contents($tmp);
+    if ($contents === false || trim($contents) === '') {
+        $_SESSION['flash'] = "CSV file appears empty.";
+        header("Location: stock.php"); exit;
+    }
+
+    // remove BOM
+    $contents = preg_replace('/^\x{FEFF}/u', '', $contents);
+
+    $firstLine = strtok($contents, "\n");
+    $delim = ',';
+    if (substr_count($firstLine, ';') > substr_count($firstLine, ',')) $delim = ';';
+    if (substr_count($firstLine, "\t") > substr_count($firstLine, ',')) $delim = "\t";
+
+    $fh = fopen('php://memory', 'r+');
+    fwrite($fh, $contents);
+    rewind($fh);
+
+    $header = fgetcsv($fh, 0, $delim);
+    if ($header === false) {
+        $_SESSION['flash'] = "CSV header could not be parsed.";
+        fclose($fh);
+        header("Location: stock.php"); exit;
+    }
+
+    $map = [];
+    foreach ($header as $k => $v) {
+        $h = strtolower(trim($v));
+        $h = preg_replace('/^\x{FEFF}/u', '', $h);
+        $h = preg_replace('/[^\p{L}\p{N}\s_]/u', '', $h);
+        $h = str_replace([' ', '-', '/'], '_', $h);
+        if ($h === 'category') $map['category'] = $k;
+        if (in_array($h, ['name','product','product_name'])) $map['name'] = $k;
+        if (in_array($h, ['price','price_per_unit','priceperunit'])) $map['price'] = $k;
+        if (in_array($h, ['qty','quantity','stock'])) $map['qty'] = $k;
+        if (in_array($h, ['image','image_path','imagepath'])) $map['image'] = $k;
+    }
+
+    if (!isset($map['category']) || !isset($map['name']) || !isset($map['price'])) {
+        $_SESSION['flash'] = "CSV header must contain Category, Name/Product and Price. Found: " . implode(', ', $header);
+        fclose($fh);
+        header("Location: stock.php"); exit;
+    }
+
+    $stmt = $conn->prepare("INSERT INTO stock (category, name, qty, price, image_path) VALUES (?, ?, ?, ?, ?)");
+    if (!$stmt) {
+        $_SESSION['flash'] = "DB prepare failed: " . $conn->error;
+        fclose($fh);
+        header("Location: stock.php"); exit;
+    }
+
+    $inserted = 0;
+    while (($row = fgetcsv($fh, 0, $delim)) !== false) {
+        $allEmpty = true;
+        foreach ($row as $c) { if (trim($c) !== '') { $allEmpty = false; break; } }
+        if ($allEmpty) continue;
+
+        $category = trim($row[$map['category']] ?? '');
+        $name     = trim($row[$map['name']] ?? '');
+        $priceRaw = $row[$map['price']] ?? '0';
+        $price = floatval(preg_replace('/[^\d\.\-]/', '', $priceRaw));
+        $qty  = isset($map['qty']) ? intval(preg_replace('/[^\d\-]/','', $row[$map['qty']] ?? '0')) : 0;
+        $image = isset($map['image']) ? trim($row[$map['image']] ?? '') : '';
+
+        if ($category === '' || $name === '' || $price <= 0) continue;
+
+        $stmt->bind_param("ssids", $category, $name, $qty, $price, $image);
+        if ($stmt->execute()) $inserted++;
+    }
+    $stmt->close();
+    fclose($fh);
+
+    $_SESSION['flash'] = "CSV import finished. Rows inserted: {$inserted}";
+    header("Location: stock.php");
+    exit;
+}
+
+/* ------------------ EXPORT CSV ------------------ */
+if (isset($_POST['export_csv'])) {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename=stock_export.csv');
+    $output = fopen("php://output", "w");
+    fputcsv($output, ['ID', 'Category', 'Name', 'Qty', 'Price', 'Image Path', 'Created At']);
+
+    $result = $conn->query("SELECT id, category, name, qty, price, image_path, created_at FROM stock ORDER BY id ASC");
+    while ($row = $result->fetch_assoc()) {
+        fputcsv($output, [
+            $row['id'], $row['category'], $row['name'], $row['qty'],
+            $row['price'], $row['image_path'], $row['created_at']
+        ]);
+    }
+    fclose($output);
+    exit;
+}
+
+/* ------------------ TEMPLATE ------------------ */
+if (isset($_POST['generate_template'])) {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename=stock_template.csv');
+    $out = fopen('php://output', 'w');
+    fputcsv($out, ['Category','Product','Name','Price Per Unit','Quantity','Image']);
+    fputcsv($out, ['Drinkware','Mug','Regular','150','100','uploads/mug.jpg']);
+    fputcsv($out, ['Accessories & Small Items','Keychain','Keychain','50','100','uploads/keychain.jpg']);
+    fputcsv($out, ['Apparel','Shirt','Tshirt','200','100','uploads/tshirt.jpg']);
+    fclose($out);
+    exit;
+}
+
+/* ------------------ READ ALL STOCK (for display) ------------------ */
+$resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id ASC");
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -401,7 +431,7 @@ $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
     table-layout: auto;
   }
 
-  /* 🌙 Dark-mode friendly form controls */
+   /* Dark-mode friendly form controls */
 input, select, textarea {
   background: var(--card-bg);
   color: var(--text);
@@ -412,22 +442,25 @@ input, select, textarea {
   transition: background .3s ease, color .3s ease, border .3s ease;
 }
 
-/* 🔹 Placeholder styling */
+/* Placeholder styling */
 input::placeholder,
 textarea::placeholder {
   color: var(--text);
   opacity: 0.6;
 }
 
-/* 🔹 Focus state */
+/* Focus state */
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--accent, #3498db);
   box-shadow: 0 0 5px var(--accent, #3498db);
 }
 
+.hidden {
+  display: none;
+}
 
-  </style>
+</style>
 </head>
 <body>
   <div class="sidebar">
@@ -437,11 +470,11 @@ input:focus, select:focus, textarea:focus {
     </div>
     <ul>
       <li><a href="index.php">Dashboard</a></li>
-      <li><a href="sales.php">Sales & Tracking</a></li>
-      <li><a href="stock.php">Product / Stock</a></li>
-      <li><a href="appointment.php">Appointments / Booking</a></li>
+      <li><a href="sales.php">Sales Tracking</a></li>
       <li><a href="orders.php">Order Tracking</a></li>
-      <li><a href="user_management.php">Account Management</a></li>
+      <li><a href="stock.php">Inventory</a></li>
+      <li><a href="appointment.php">Appointments</a></li>
+      <li><a href="user_management.php">Account</a></li>
     </ul>
     <div style="margin-top:auto;">
       <form action="logout.php" method="POST"><button type="submit" style="width:100%; padding:8px; border-radius:6px; border:none; background:#e74c3c; color:#fff;">Logout</button></form>
@@ -451,7 +484,7 @@ input:focus, select:focus, textarea:focus {
   <div class="content">
   <div class="topbar">
     <div id="clock" style="margin-right:auto; font-weight:bold; font-size:16px;"></div>
-    <button class="toggle-btn" onclick="toggleTheme()">🌙 Toggle Dark Mode</button>
+    <button class="toggle-btn" onclick="toggleTheme()">Toggle Dark Mode</button>
    </div>
     <div style="display:flex; justify-content:space-between; align-items:center;">
       <h1>Product / Stock</h1>
@@ -460,149 +493,155 @@ input:focus, select:focus, textarea:focus {
 
     <p>Manage your product inventory below.</p>
 
-    <div style="display:flex; gap:16px; margin-bottom:12px;">
-      <div style="flex:1; display:flex; gap:12px; align-items:center;">
-        <div class="card2" style="padding:12px; border-radius:8px; background:var(--card-bg); box-shadow:0 2px 6px rgba(0,0,0,0.04); font-weight:bold;">
-          📊 Total Stock: <?php $r = $conn->query("SELECT COUNT(*) as c FROM stock"); $c = $r->fetch_assoc(); echo intval($c['c']); ?>
-        </div>
-      </div>
+<div style="display:flex; gap:16px; margin-bottom:12px;">
+  <div style="flex:1; display:flex; gap:12px; align-items:center;">
+    <div class="card2" style="padding:12px; border-radius:8px; background:var(--card-bg); box-shadow:0 2px 6px rgba(0,0,0,0.04); font-weight:bold;">
+      📊 Total Stock: 
+      <?php 
+      $r = $conn->query("SELECT COUNT(*) as c FROM stock WHERE status='active'"); 
+      $c = $r->fetch_assoc(); 
+      echo intval($c['c']); 
+      ?>
     </div>
-
-<!-- Add Product + CSV + Bulk Delete -->
-<div style="margin-bottom:16px; display:flex; flex-wrap:wrap; gap:8px;">
-
- <!-- Add Product + Bulk Delete -->
-<form id="productForm" enctype="multipart/form-data" method="POST" 
-      style="padding: 12px; background: var(--card-bg); border-radius: 8px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04); flex-wrap:wrap; width:100%">
-  
-  <input type="text" name="category" placeholder="Category" required class="form-control" style="flex:1;">
-  <input type="text" name="name" placeholder="Product Name" required class="form-control" style="flex:1;">
-  <input type="number" name="qty" placeholder="0" min="0" value="0" required class="form-control" style="width:100px;">
-  <input type="number" step="0.01" name="price" placeholder="Price" required class="form-control" style="width:120px;">
-  <input type="file" name="image" accept="image/*" class="form-control">
-
-  <!-- Add Product -->
-  <button type="submit" name="add_product" class="btn" style="background:#27ae60; color:#fff;">Add Product 📑➕</button>
-
-  <!-- Bulk Delete -->
-  <button type="submit" name="bulk_delete" form="stockTableForm" 
-          onclick="return confirm('Are you sure you want to delete selected products?');" 
-          class="btn" style="background:#e74c3c; color:#fff;">Delete Selected</button>
-</form>
-
-<!-- CSV Tools -->
-<div class="csv-tools" style="padding:12px; margin-bottom:4px; width:100%">
-  <form action="stock.php" method="POST" enctype="multipart/form-data" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-    <input type="file" name="csv_file" accept=".csv" class="form-control">
-    <button type="submit" name="import_csv" class="btn" style="background:#3498db; color:#fff;">📥 Import</button>
-    <button type="submit" name="export_csv" class="btn" style="background:#2ecc71; color:#fff;">📤 Export</button>
-    <button type="submit" name="generate_template" class="btn" style="background:#9b59b6; color:#fff;">📄 Template</button>
-  </form>
-  <div class="small" style="margin-top:6px;">
-    CSV File Only: <i>Category, Name, Quantity, Price, Image</i> 
-    <b><i>(NOTE: Quantity & Image are optional)</i></b>
   </div>
 </div>
 
-<!-- Stock Table -->
-<div class="container-fluid" style="width:100%"">
-<form method="POST" id="stockTableForm">
-  <table class="table table-striped table-bordered">
-    <thead>
-      <tr>
-        <th><input type="checkbox" id="selectAll"></th>
-        <th>ID</th>
-        <th>Category</th>
-        <th>Product Name</th>
-        <th>Price</th>
-        <th>Quantity</th>
-        <th>Image</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody>
-      <?php
-      $counter = 1;
-      $result = $conn->query("SELECT * FROM stock ORDER BY id ASC");
-      while ($row = $result->fetch_assoc()):
-      ?>
-      <tr>
-        <td><input type="checkbox" name="selected[]" value="<?= $row['id'] ?>"></td>
-        <td><?= $counter++; ?></td>
-        <td><?= htmlspecialchars($row['category']) ?></td>
-        <td><?= htmlspecialchars($row['name']) ?></td>
-        <td>₱<?= number_format((float)$row['price'],2) ?></td>
-        <td><?= intval($row['qty']) ?></td>
-        <td>
-          <?php if (!empty($row['image_path'])): ?>
-            <img src="<?= htmlspecialchars($row['image_path']) ?>" width="50">
-          <?php endif; ?>
-        </td>
-        <td>
-          <div class="d-flex gap-1">
-            <button class="btn btn-sm btn-warning" type="button" onclick="toggleEdit(<?= $row['id'] ?>)">Edit</button>
 
-            <!-- Per-row delete -->
-            <form method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this product?');">
-              <input type="hidden" name="id" value="<?= $row['id'] ?>">
-              <input type="hidden" name="delete_product" value="1">
-              <!-- <button class="btn btn-sm btn-danger" type="submit">Delete</button> -->
+<!-- Add Product Form -->
+    <div style="margin-bottom:16px;">
+      <form id="productForm" enctype="multipart/form-data" method="POST" style="padding:12px; background:var(--card-bg); border-radius:8px;">
+        <input type="text" name="category" placeholder="Category" required style="width:calc(15% - 8px); margin-right:8px;">
+        <input type="text" name="name" placeholder="Product Name" required style="width:calc(15% - 8px);">
+        <input type="number" name="qty" placeholder="0" min="0" value="0" required style="width:100px; margin-top:8px;">
+        <input type="number" step="0.01" name="price" placeholder="Price" required style="width:120px; margin-top:8px;">
+        <input type="file" name="image" accept="image/*" style="margin-top:8px;">
+          <button type="submit" name="add_product" class="btn" style="background:#27ae60; color:#fff;">Add Product</button>
+      </form>
+    </div>
+
+    <!-- CSV Tools -->
+    <div class="csv-tools" style="margin-bottom:12px; padding:12px; background:var(--card-bg); border-radius:8px;">
+      <form action="stock.php" method="POST" enctype="multipart/form-data" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <input type="file" name="csv_file" accept=".csv" class="form-control">
+        <button type="submit" name="import_csv" class="btn" style="background:#3498db; color:#fff;">📥 Import</button>
+        <button type="submit" name="export_csv" class="btn" style="background:#2ecc71; color:#fff;">📤 Export</button>
+        <button type="submit" name="generate_template" class="btn" style="background:#9b59b6; color:#fff;">📄 Template</button>
+      </form>
+      <div class="small">CSV File Only: <i>Category, Name, Quantity, Price, Image</i> <b><i>(NOTE: Quantity & Image are optional)</i></b></div>
+    </div>
+
+    <!-- bulk-delete form (separate) -->
+    <form id="bulkDeleteForm" method="POST" action="stock.php" style="display:inline-block;margin-bottom:8px;">
+      <button type="submit" name="bulk_delete" class="btn" style="background:#e74c3c;color:#fff" onclick="return confirm('Delete selected?')">Delete Selected</button>
+    </form>
+
+    <!-- table (NOT inside the bulk form). Checkboxes have form="bulkDeleteForm" -->
+    <table>
+      <thead>
+        <tr>
+          <th><input type="checkbox" id="selectAll"></th>
+          <th>#</th>
+          <th>Category</th>
+          <th>Image</th>
+          <th>Product Name</th>
+          <th>Price</th>
+          <th>Qty</th>
+          <th>Total</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php
+        $counter = 1;
+        if ($resAll && $resAll->num_rows > 0):
+            while ($row = $resAll->fetch_assoc()):
+                $lowStock = ($row['qty'] < 20);
+        ?>
+        <tr <?= $lowStock ? 'style="background:#ffe6e6;"' : '' ?>>
+          <td><input type="checkbox" name="selected[]" value="<?= $row['id'] ?>" form="bulkDeleteForm"></td>
+          <td><?= $counter++ ?></td>
+          <td><?= htmlspecialchars($row['category']) ?></td>
+          <td><?php if (!empty($row['image_path'])): ?><img src="<?= htmlspecialchars($row['image_path']) ?>" class="thumb"><?php endif; ?></td>
+          <td><?= htmlspecialchars($row['name']) ?></td>
+          <td>₱<?= number_format((float)$row['price'],2) ?></td>
+          <td><?= intval($row['qty']) ?> <?php if ($lowStock) echo '<span style="color:red;font-weight:bold">LOW STOCK</span>'; ?></td>
+          <td>₱<?= number_format($row['price'] * $row['qty'],2) ?></td>
+          <td>
+            <button type="button" class="btn" onclick="toggleEditRow(<?= $row['id'] ?>)">Edit</button>
+          </td>
+        </tr>
+
+        <!-- inline edit row (hidden by default) -->
+        <tr id="edit-row-<?= $row['id'] ?>" class="hidden edit-row">
+          <td colspan="10">
+            <form method="POST" enctype="multipart/form-data" action="stock.php" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <input type="hidden" name="edit_id" value="<?= $row['id'] ?>">
+              <input name="category" value="<?= htmlspecialchars($row['category']) ?>" required>
+              <input name="name" value="<?= htmlspecialchars($row['name']) ?>" required>
+              <input type="number" name="qty" value="<?= intval($row['qty']) ?>" min="0" required style="width:100px;">
+              <input type="number" step="0.01" name="price" value="<?= htmlspecialchars($row['price']) ?>" required style="width:120px;">
+              <input type="file" name="image" accept="image/*">
+              <button type="submit" name="update_product" class="btn" style="background:#3498db;color:#fff">Save</button>
+              <button type="button" class="btn" onclick="toggleEditRow(<?= $row['id'] ?>)">Cancel</button>
             </form>
-          </div>
-        </td>
-      </tr>
+          </td>
+        </tr>
 
-      <!-- hidden edit row -->
-      <tr id="edit-row-<?= $row['id'] ?>" class="edit-row" style="display:none;">
-        <td colspan="8">
-          <form method="POST" enctype="multipart/form-data" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-            <input type="hidden" name="edit_id" value="<?= $row['id'] ?>">
-            <input type="text" name="category" value="<?= htmlspecialchars($row['category']) ?>" required>
-            <input type="text" name="name" value="<?= htmlspecialchars($row['name']) ?>" required>
-            <input type="number" name="qty" value="<?= intval($row['qty']) ?>" min="0" required>
-            <input type="number" step="0.01" name="price" value="<?= htmlspecialchars($row['price']) ?>" required>
-            <input type="file" name="image" accept="image/*">
-            <button type="submit" name="update_product" class="btn btn-primary btn-sm">💾 Save</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEdit(<?= $row['id'] ?>)">❌ Cancel</button>
-          </form>
-        </td>
-      </tr>
-      <?php endwhile; ?>
-    </tbody>
-  </table>
-</form>
-<div>
+        <?php
+            endwhile;
+        else:
+        ?>
+        <tr>
+          <td colspan="10" style="text-align:center;color:#999;">No products in stock.</td>
+        </tr>
+        <?php endif; ?>
+      </tbody>
+    </table>
+  </div> <!-- content -->
+
 <script>
-  // toggle edit rows
-  function toggleEdit(id) {
-    const el = document.getElementById('edit-row-' + id);
-    if (!el) return;
-    el.style.display = el.style.display === 'table-row' ? 'none' : 'table-row';
+  // openEdit populates and shows the edit form (no nested forms)
+  function openEdit(id, category, name, qty, price) {
+    document.getElementById('edit_id').value = id;
+    document.getElementById('edit_category').value = category;
+    document.getElementById('edit_name').value = name;
+    document.getElementById('edit_qty').value = qty;
+    document.getElementById('edit_price').value = price;
+    document.getElementById('editFormContainer').style.display = 'flex';
   }
 
-  // select all checkboxes
-  document.getElementById('selectAll').addEventListener('change', function() {
-    document.querySelectorAll('input[name="selected[]"]').forEach(cb => cb.checked = this.checked);
-  });
-</script>
-  <script>
-    function toggleTheme() {
-      document.body.classList.toggle("dark");
-      localStorage.setItem("theme", document.body.classList.contains("dark") ? "dark" : "light");
-    }
-    if (localStorage.getItem("theme") === "dark") {
-      document.body.classList.add("dark");
-    }
-  </script>
+  function closeEdit() {
+    document.getElementById('editFormContainer').style.display = 'none';
+    // clear file input
+    document.getElementById('edit_image').value = '';
+  }
 
-  <script>
-    function updateClock() {
-      const now = new Date();
-      document.getElementById("clock").innerText =
-    now.toLocaleDateString() + " " + now.toLocaleTimeString();
-    }
-    setInterval(updateClock, 1000);
-      updateClock();
-  </script>
+  // Select/Deselect all checkboxes
+  document.getElementById('selectAll').addEventListener('click', function(e) {
+    document.querySelectorAll('input[name="selected[]"]').forEach(cb => cb.checked = e.target.checked);
+  });
+
+  // optional theme/clock code kept
+  function toggleTheme() {
+    document.body.classList.toggle("dark");
+    localStorage.setItem("theme", document.body.classList.contains("dark") ? "dark" : "light");
+  }
+  if (localStorage.getItem("theme") === "dark") {
+    document.body.classList.add("dark");
+  }
+  function updateClock() {
+    const now = new Date();
+    document.getElementById("clock").innerText = now.toLocaleDateString() + " " + now.toLocaleTimeString();
+  }
+  setInterval(updateClock, 1000); updateClock();
+
+  function toggleEditRow(id) {
+  const row = document.getElementById("edit-row-" + id);
+  if (row) {
+    row.classList.toggle("hidden");
+  }
+}
+
+</script>
 </body>
 </html>

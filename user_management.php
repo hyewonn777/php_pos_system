@@ -3,42 +3,46 @@ session_start();
 require 'db.php'; // mysqli connection
 
 $error = '';
-/* -------------------- ADMIN CRUD -------------------- */
-/* ADD ADMIN */
-if (isset($_POST['add_admin'])) {
+$success = '';
+
+/* -------------------- USER CRUD (Admin & Photographer) -------------------- */
+
+/* ADD USER */
+if (isset($_POST['add_user'])) {
+    $fullname = trim($_POST['fullname'] ?? '');
     $username = trim($_POST['username'] ?? '');
     $password_raw = trim($_POST['password'] ?? '');
-    if ($username === '' || $password_raw === '') {
-        $error = "Please fill required admin fields.";
+    $role = trim($_POST['role'] ?? ''); // "admin" or "photographer"
+
+    if ($fullname === '' || $username === '' || $password_raw === '' || $role === '') {
+        $error = "Please fill all required fields.";
     } else {
         $password = hash('sha256', $password_raw);
 
-        $check = $conn->prepare("SELECT id FROM admin WHERE username = ?");
+        $check = $conn->prepare("SELECT id FROM users WHERE username = ?");
         if (!$check) {
-            $error = "SQL Error (Check admin prepare): " . $conn->error;
+            $error = "SQL Error (Check user prepare): " . $conn->error;
         } else {
             $check->bind_param("s", $username);
             if (!$check->execute()) {
-                $error = "SQL Error (Check admin execute): " . $check->error;
+                $error = "SQL Error (Check user execute): " . $check->error;
             } else {
                 $check->store_result();
                 if ($check->num_rows > 0) {
-                    $error = "⚠️ Admin username already exists!";
+                    $error = " Username already exists!";
                 } else {
-                    $stmt = $conn->prepare("INSERT INTO admin (username, password_hash, created_at) VALUES (?, ?, NOW())");
+                    $stmt = $conn->prepare("INSERT INTO users (fullname, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, NOW())");
                     if (!$stmt) {
-                        $error = "SQL Error (Insert admin prepare): " . $conn->error;
+                        $error = "SQL Error (Insert user prepare): " . $conn->error;
                     } else {
-                        $stmt->bind_param("ss", $username, $password);
+                        $stmt->bind_param("ssss", $fullname, $username, $password, $role);
                         if (!$stmt->execute()) {
-                            $error = "SQL Error (Insert admin execute): " . $stmt->error;
+                            $error = "SQL Error (Insert user execute): " . $stmt->error;
                         } else {
                             $stmt->close();
                             $check->close();
-                            header("Location: user_management.php");
-                            exit;
+                            $success = " $role added successfully!";
                         }
-                        $stmt->close();
                     }
                 }
             }
@@ -47,143 +51,89 @@ if (isset($_POST['add_admin'])) {
     }
 }
 
-/* UPDATE ADMIN */
-if (isset($_POST['update_admin'])) {
+/* UPDATE USER */
+if (isset($_POST['update_user'])) {
     $id = intval($_POST['id'] ?? 0);
+    $fullname = trim($_POST['fullname'] ?? '');
     $username = trim($_POST['username'] ?? '');
-    if ($id <= 0 || $username === '') {
-        $error = "Missing fields for admin update.";
+    $role = trim($_POST['role'] ?? '');
+
+    if ($id <= 0 || $fullname === '' || $username === '' || $role === '') {
+        $error = "Missing fields for user update.";
     } else {
         if (!empty($_POST['password'])) {
             $password = hash('sha256', trim($_POST['password']));
-            $stmt = $conn->prepare("UPDATE admin SET username=?, password_hash=? WHERE id=?");
-            if (!$stmt) {
-                $error = "SQL Error (Update admin prepare): " . $conn->error;
-            } else {
-                $stmt->bind_param("ssi", $username, $password, $id);
-            }
+            $stmt = $conn->prepare("UPDATE users SET fullname=?, username=?, password_hash=?, role=? WHERE id=?");
+            $stmt->bind_param("ssssi", $fullname, $username, $password, $role, $id);
         } else {
-            $stmt = $conn->prepare("UPDATE admin SET username=? WHERE id=?");
-            if (!$stmt) {
-                $error = "SQL Error (Update admin prepare): " . $conn->error;
-            } else {
-                $stmt->bind_param("si", $username, $id);
-            }
+            $stmt = $conn->prepare("UPDATE users SET fullname=?, username=?, role=? WHERE id=?");
+            $stmt->bind_param("sssi", $fullname, $username, $role, $id);
         }
-        if (isset($stmt) && $stmt) {
+
+        if ($stmt) {
             if (!$stmt->execute()) {
-                $error = "SQL Error (Update admin execute): " . $stmt->error;
+                $error = "SQL Error (Update user execute): " . $stmt->error;
             } else {
                 $stmt->close();
-                header("Location: user_management.php");
-                exit;
+                $success = " $role updated successfully!";
             }
-            $stmt->close();
         }
     }
 }
 
-/* DELETE ADMIN */
-if (isset($_POST['delete_admin'])) {
+/* DELETE USER */
+if (isset($_POST['delete_user'])) {
     $id = intval($_POST['id'] ?? 0);
     if ($id <= 0) {
-        $error = "Invalid admin id.";
+        $error = "Invalid user id.";
     } else {
-        $res = $conn->query("SELECT COUNT(*) as cnt FROM admin");
+        // Prevent deleting the last admin
+        $res = $conn->query("SELECT COUNT(*) as cnt FROM user WHERE role='admin'");
         if ($res) {
             $row = $res->fetch_assoc();
-            if ($row['cnt'] <= 1) {
-                $error = "⚠️ Cannot delete the last Admin account!";
+            $isAdmin = $conn->query("SELECT role FROM user WHERE id=$id")->fetch_assoc()['role'] ?? '';
+            if ($isAdmin === 'admin' && $row['cnt'] <= 1) {
+                $error = "Cannot delete the last Admin account!";
             } else {
-                $stmt = $conn->prepare("DELETE FROM admin WHERE id=?");
+                $stmt = $conn->prepare("DELETE FROM users WHERE id=?");
                 if (!$stmt) {
-                    $error = "SQL Error (Delete admin prepare): " . $conn->error;
+                    $error = "SQL Error (Delete user prepare): " . $conn->error;
                 } else {
                     $stmt->bind_param("i", $id);
                     if (!$stmt->execute()) {
-                        $error = "SQL Error (Delete admin execute): " . $stmt->error;
+                        $error = "SQL Error (Delete user execute): " . $stmt->error;
                     } else {
                         $stmt->close();
-                        header("Location: user_management.php");
-                        exit;
+                        $success = "User deleted successfully!";
                     }
-                    $stmt->close();
                 }
             }
-        } else {
-            $error = "SQL Error (Count admins): " . $conn->error;
         }
     }
 }
 
-/* FETCH ALL ADMINS */
-$admin = [];
-$res2 = $conn->query("SELECT * FROM admin ORDER BY id ASC");
-if ($res2) {
-    $admin = $res2->fetch_all(MYSQLI_ASSOC);
-    $res2->free();
+/* FETCH ALL USERS */
+$users = [];
+$admins = [];
+$photographers = [];
+
+$res = $conn->query("SELECT * FROM users ORDER BY id ASC");
+if ($res) {
+    $users = $res->fetch_all(MYSQLI_ASSOC);
+    $res->free();
 } else {
-    if ($error === '') $error = "Could not load admin users: " . $conn->error;
+    if ($error === '') $error = "Could not load users: " . $conn->error;
 }
 
-/* -------------------- PHOTOGRAPHER CRUD -------------------- */
-if ($_SERVER["REQUEST_METHOD"] === "POST") {
-
-    // ADD photographer
-    if (isset($_POST['add_photographer'])) {
-        $fullname = trim($_POST['fullname']);
-        $username = trim($_POST['username']);
-        $password = hash('sha256', trim($_POST['password']));
-
-        $check = $conn->prepare("SELECT id FROM photographer WHERE username=?");
-        $check->bind_param("s", $username);
-        $check->execute();
-        $check->store_result();
-
-        if ($check->num_rows > 0) {
-            $error = "⚠️ Photographer username already exists!";
-        } else {
-            $stmt = $conn->prepare("INSERT INTO photographer (fullname, username, password_hash, created_at) VALUES (?, ?, ?, NOW())");
-            $stmt->bind_param("sss", $fullname, $username, $password);
-            $stmt->execute();
-            $stmt->close();
-            $success = "✅ Photographer added successfully!";
-        }
-        $check->close();
-    }
-
-    // UPDATE photographer
-    if (isset($_POST['update_photographer'])) {
-        $id = intval($_POST['id']);
-        $fullname = trim($_POST['fullname']);
-        $username = trim($_POST['username']);
-
-        if (!empty($_POST['password'])) {
-            $password = hash('sha256', trim($_POST['password']));
-            $stmt = $conn->prepare("UPDATE photographer SET fullname=?, username=?, password_hash=? WHERE id=?");
-            $stmt->bind_param("sssi", $fullname, $username, $password, $id);
-        } else {
-            $stmt = $conn->prepare("UPDATE photographer SET fullname=?, username=? WHERE id=?");
-            $stmt->bind_param("ssi", $fullname, $username, $id);
-        }
-        $stmt->execute();
-        $stmt->close();
-        $success = "✅ Photographer updated successfully!";
-    }
-
-    // DELETE photographer
-    if (isset($_POST['delete_photographer'])) {
-        $id = intval($_POST['id']);
-        $stmt = $conn->prepare("DELETE FROM photographer WHERE id=?");
-        $stmt->bind_param("i", $id);
-        $stmt->execute();
-        $stmt->close();
-        $success = "🗑️ Photographer deleted successfully!";
-    }
+// Ensure arrays exist even if query failed
+if (is_array($users)) {
+    $admins = array_filter($users, fn($u) => $u['role'] === 'admin');
+    $photographers = array_filter($users, fn($u) => $u['role'] === 'photographer');
+} else {
+    $admins = [];
+    $photographers = [];
 }
 
-// Always fetch latest photographer list
-$photographers = $conn->query("SELECT * FROM photographer ORDER BY id ASC")->fetch_all(MYSQLI_ASSOC);
 
 ?>
 <!DOCTYPE html>
@@ -323,11 +273,11 @@ $photographers = $conn->query("SELECT * FROM photographer ORDER BY id ASC")->fet
     <div class="logo-box"><img src="images/rsz_logo.png" alt="Logo"></div>
     <ul>
       <li><a href="index.php">Dashboard</a></li>
-      <li><a href="sales.php">Sales & Tracking</a></li>
-      <li><a href="stock.php">Product / Stock</a></li>
-      <li><a href="appointment.php">Appointments / Booking</a></li>
+      <li><a href="sales.php">Sales Tracking</a></li>
       <li><a href="orders.php">Order Tracking</a></li>
-      <li><a href="user_management.php">Account Management</a></li>
+      <li><a href="stock.php">Inventory</a></li>
+      <li><a href="appointment.php">Appointments</a></li>
+      <li><a href="user_management.php">Account</a></li>
     </ul>
     <div class="logout">
       <form action="logout.php" method="POST"><button type="submit">Logout</button></form>
@@ -346,68 +296,75 @@ $photographers = $conn->query("SELECT * FROM photographer ORDER BY id ASC")->fet
     <div class="section">
       <h2>Admin Accounts</h2>
       <form method="POST">
+        <input type="text" name="fullname" placeholder="Full Name" required>
         <input type="text" name="username" placeholder="Username" required>
         <input type="password" name="password" placeholder="Password" required>
-        <button type="submit" name="add_admin">Add Admin</button>
+        <input type="hidden" name="role" value="admin">
+        <button type="submit" name="add_user">Add Admin</button>
       </form>
       <table>
-        <tr><th>ID</th><th>Username</th><th>Created At</th><th>Action</th></tr>
-        <?php foreach ($admin as $a): ?>
+        <tr><th>ID</th><th>Full Name</th><th>Username</th><th>Created At</th><th>Action</th></tr>
+        <?php foreach ($admins as $a): ?>
           <tr>
             <td><?= $a['id'] ?></td>
+            <td><?= htmlspecialchars($a['fullname']) ?></td>
             <td><?= htmlspecialchars($a['username']) ?></td>
             <td><?= $a['created_at'] ?></td>
             <td>
               <form method="POST" style="display:inline;">
                 <input type="hidden" name="id" value="<?= $a['id'] ?>">
+                <input type="text" name="fullname" value="<?= htmlspecialchars($a['fullname']) ?>">
                 <input type="text" name="username" value="<?= htmlspecialchars($a['username']) ?>">
                 <input type="password" name="password" placeholder="New Password (optional)">
-                <button type="submit" name="update_admin">Update</button>
+                <input type="hidden" name="role" value="admin">
+                <button type="submit" name="update_user">Update</button>
               </form>
               <form method="POST" style="display:inline;">
                 <input type="hidden" name="id" value="<?= $a['id'] ?>">
-                <button type="submit" name="delete_admin" onclick="return confirm('Delete this admin?')">Delete</button>
+                <button type="submit" name="delete_user" onclick="return confirm('Delete this admin?')">Delete</button>
               </form>
             </td>
           </tr>
         <?php endforeach; ?>
       </table>
     </div>
-    <br>
-    <br>
-  <!-- Photographer Management -->
-<div class="section">
-  <h2>Photographer Accounts</h2>
-  <form method="POST">
-    <input type="text" name="fullname" placeholder="Full Name" required>
-    <input type="text" name="username" placeholder="Username" required>
-    <input type="password" name="password" placeholder="Password" required>
-    <button type="submit" name="add_photographer">Add Photographer</button>
-  </form>
-  <table>
-    <tr><th>ID</th><th>Full Name</th><th>Username</th><th>Created At</th><th>Action</th></tr>
-    <?php foreach ($photographers as $p): ?>
-      <tr>
-        <td><?= $p['id'] ?></td>
-        <td><?= htmlspecialchars($p['fullname']) ?></td>
-        <td><?= htmlspecialchars($p['username']) ?></td>
-        <td><?= $p['created_at'] ?></td>
-        <td>
-          <form method="POST" style="display:inline;">
-            <input type="hidden" name="id" value="<?= $p['id'] ?>">
-            <input type="text" name="fullname" value="<?= htmlspecialchars($p['fullname']) ?>">
-            <input type="text" name="username" value="<?= htmlspecialchars($p['username']) ?>">
-            <input type="password" name="password" placeholder="New Password (optional)">
-            <button type="submit" name="update_photographer">Update</button>
-          </form>
-          <form method="POST" style="display:inline;">
-            <input type="hidden" name="id" value="<?= $p['id'] ?>">
-            <button type="submit" name="delete_photographer" onclick="return confirm('Delete this photographer?')">Delete</button>
-          </form>
-        </td>
-      </tr>
-    <?php endforeach; ?>
-  </table>
+
+    <!-- Photographer Management -->
+    <div class="section">
+      <h2>Photographer Accounts</h2>
+      <form method="POST">
+        <input type="text" name="fullname" placeholder="Full Name" required>
+        <input type="text" name="username" placeholder="Username" required>
+        <input type="password" name="password" placeholder="Password" required>
+        <input type="hidden" name="role" value="photographer">
+        <button type="submit" name="add_user">Add Photographer</button>
+      </form>
+      <table>
+        <tr><th>ID</th><th>Full Name</th><th>Username</th><th>Created At</th><th>Action</th></tr>
+        <?php foreach ($photographers as $p): ?>
+          <tr>
+            <td><?= $p['id'] ?></td>
+            <td><?= htmlspecialchars($p['fullname']) ?></td>
+            <td><?= htmlspecialchars($p['username']) ?></td>
+            <td><?= $p['created_at'] ?></td>
+            <td>
+              <form method="POST" style="display:inline;">
+                <input type="hidden" name="id" value="<?= $p['id'] ?>">
+                <input type="text" name="fullname" value="<?= htmlspecialchars($p['fullname']) ?>">
+                <input type="text" name="username" value="<?= htmlspecialchars($p['username']) ?>">
+                <input type="password" name="password" placeholder="New Password (optional)">
+                <input type="hidden" name="role" value="photographer">
+                <button type="submit" name="update_user">Update</button>
+              </form>
+              <form method="POST" style="display:inline;">
+                <input type="hidden" name="id" value="<?= $p['id'] ?>">
+                <button type="submit" name="delete_user" onclick="return confirm('Delete this photographer?')">Delete</button>
+              </form>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+      </table>
+    </div>
 </div>
 
   <script>
