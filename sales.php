@@ -191,6 +191,7 @@ $totalProfitAfterDiscount = array_sum(array_column($skuMargins,'profit_after_dis
       border-collapse: collapse; 
       margin-top: 20px; 
       table-layout: fixed; 
+
     }
 
     #salesTable th, #salesTable td {
@@ -199,6 +200,7 @@ $totalProfitAfterDiscount = array_sum(array_column($skuMargins,'profit_after_dis
       text-align: left; 
       vertical-align: middle; 
       word-wrap: break-word;
+
     }
 
     #salesTable th { 
@@ -315,15 +317,20 @@ $totalProfitAfterDiscount = array_sum(array_column($skuMargins,'profit_after_dis
     body, .card, .sidebar, #salesTable th, #salesTable td {
       transition: background-color 0.3s ease, color 0.3s ease;
     }
-    
-    /* Summary Cards */
-    .summary { display:flex; gap:20px; margin:20px 0; }
-    .summary .card { flex:1; padding:20px; border-radius:10px; text-align:center; background:#fff; font-size:20px; font-weight:bold; }
+
     /* Table */
     #salesTable, #skuTable { width:100%; border-collapse:collapse; margin-top:20px; }
     #salesTable th, #salesTable td, #skuTable th, #skuTable td { border:1px solid #e3e3e3; padding:12px; text-align:left; }
     #salesTable th, #skuTable th { background:#f4f4f4; font-weight:bold; }
     .search-bar { margin:10px 0; width:100%; }
+
+    .qty-input {
+      width: 60px;        
+      text-align: center;
+      padding: 5px;
+      font-size: 14px;
+}
+
 
   </style>
 </head>
@@ -362,7 +369,9 @@ $totalProfitAfterDiscount = array_sum(array_column($skuMargins,'profit_after_dis
       <div class="card"><b>Discount:</b><br>₱<?= number_format($discountAmount,2) ?></div>
       <div class="card"><b>Net Sales:</b><br>₱<?= number_format($netSales,2) ?></div>
     </div>
-
+    <!-- Search Bar -->
+        <input type="text" id="searchInput" placeholder="Search products, date, ..." 
+      style="padding:15px; width:250px; border-radius:6px; border:1px solid #ccc; margin-bottom:10px; width:100%;"> <div>
 
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
   <button type="submit" name="delete_selected" style="padding:5px 10px; background:#e74c3c; color:white; border:none; border-radius:5px; cursor:pointer;" 
@@ -377,7 +386,6 @@ $totalProfitAfterDiscount = array_sum(array_column($skuMargins,'profit_after_dis
       <th>Product</th>
       <th>Quantity</th>
       <th>Total</th>
-
       <th>Profit</th>
       <th>Profit After Discount</th>
       <th>Level</th>
@@ -398,7 +406,7 @@ $totalProfitAfterDiscount = array_sum(array_column($skuMargins,'profit_after_dis
       </td>
       <td><?= htmlspecialchars($row['sale_date']) ?></td>
       <td><?= htmlspecialchars($sku) ?></td>
-      <td><input type="number" name="quantity[<?= $row['id'] ?>]" value="<?= $row['quantity'] ?>" min="1"></td>
+      <td><input type="number" class="qty-input" name="quantity[<?= $row['id'] ?>]" value="<?= $row['quantity'] ?>" min="1"></td>
       <td>₱<?= number_format($row['total'],2) ?></td>
       <td>₱<?= number_format($profit,2) ?></td>
       <td>₱<?= number_format($profitAfter,2) ?></td>

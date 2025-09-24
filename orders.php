@@ -462,67 +462,65 @@ if (isset($_POST['delete_orders']) && !empty($_POST['order_ids'])) {
     <?php endif; ?>
 
     <h1>Order Tracking</h1>
-    <p>Track customer orders and delivery status here.</p>
+    <p>Track pending customer orders.</p>
+    <form method="POST">
+      <table border="1" cellpadding="10">
+        <thead>
+          <tr>
+            <th>Select</th>
+            <th>Order ID</th>
+            <th>Customer</th>
+            <th>Items</th>
+            <th>Total</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+    <?php
+    $orders = $conn->query("SELECT * FROM orders ORDER BY id ASC");
 
-<form method="POST">
-  <table border="1" cellpadding="10">
-    <thead>
-      <tr>
-        <th>Select</th>
-        <th>Order ID</th>
-        <th>Customer</th>
-        <th>Items</th>
-        <th>Total</th>
-        <th>Status</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody>
-<?php
-$orders = $conn->query("SELECT * FROM orders ORDER BY id ASC");
+    if ($orders && $orders->num_rows > 0) {
+        while ($order = $orders->fetch_assoc()) {
+            $itemsList = [];
+            $total = 0;
 
-if ($orders && $orders->num_rows > 0) {
-    while ($order = $orders->fetch_assoc()) {
-        $itemsList = [];
-        $total = 0;
+            $itemsRes = $conn->prepare("SELECT oi.quantity, s.name, s.price 
+                                        FROM order_items oi
+                                        JOIN stock s ON s.id = oi.product_id
+                                        WHERE oi.order_id = ?");
+            $itemsRes->bind_param("i", $order['id']);
+            $itemsRes->execute();
+            $itemsRes->bind_result($qty, $name, $price);
 
-        $itemsRes = $conn->prepare("SELECT oi.quantity, s.name, s.price 
-                                    FROM order_items oi
-                                    JOIN stock s ON s.id = oi.product_id
-                                    WHERE oi.order_id = ?");
-        $itemsRes->bind_param("i", $order['id']);
-        $itemsRes->execute();
-        $itemsRes->bind_result($qty, $name, $price);
-
-        while ($itemsRes->fetch()) {
-            $itemsList[] = "{$qty}x {$name}";
-            $total += $qty * $price;
+            while ($itemsRes->fetch()) {
+                $itemsList[] = "{$qty}x {$name}";
+                $total += $qty * $price;
+            }
+            $itemsRes->close();
+    ?>
+    <tr>
+        <td><input type="checkbox" name="order_ids[]" value="<?= $order['id']; ?>"></td>
+        <td><?= $order['id']; ?></td>
+        <td><?= htmlspecialchars($order['customer_name']); ?></td>
+        <td><?= !empty($itemsList) ? implode(", ", $itemsList) : "No items"; ?></td>
+        <td>₱<?= number_format($total, 2); ?></td>
+        <td><?= $order['status']; ?></td>
+        <td>
+            <?php if ($order['status'] != 'Confirmed') { ?>
+                <button type="submit" name="confirm_order" value="<?= $order['id']; ?>">Confirm</button>
+            <?php } else { echo "Approved"; } ?>
+        </td>
+    </tr>
+    <?php
         }
-        $itemsRes->close();
-?>
-<tr>
-    <td><input type="checkbox" name="order_ids[]" value="<?= $order['id']; ?>"></td>
-    <td><?= $order['id']; ?></td>
-    <td><?= htmlspecialchars($order['customer_name']); ?></td>
-    <td><?= !empty($itemsList) ? implode(", ", $itemsList) : "No items"; ?></td>
-    <td>₱<?= number_format($total, 2); ?></td>
-    <td><?= $order['status']; ?></td>
-    <td>
-        <?php if ($order['status'] != 'Confirmed') { ?>
-            <button type="submit" name="confirm_order" value="<?= $order['id']; ?>">Confirm</button>
-        <?php } else { echo "Approved"; } ?>
-    </td>
-</tr>
-<?php
+    } else {
+        echo "<tr><td colspan='7' style='text-align:center;'>No orders found.</td></tr>";
     }
-} else {
-    echo "<tr><td colspan='7' style='text-align:center;'>No orders found.</td></tr>";
-}
-?>
+    ?>
     </tbody>
   </table>
-
-  <button type="submit" name="delete_orders" style="margin-top:10px;background:#e74c3c;color:#fff;padding:8px 12px;border:none;border-radius:5px;cursor:pointer;">🗑 Delete Selected</button>
+  <button type="submit" name="delete_orders" style="margin-top:10px;background:#e74c3c;color:#fff;padding:8px 12px;border:none;border-radius:5px;cursor:pointer;">Delete Selected</button>
 </form>
 
 
@@ -542,9 +540,7 @@ if ($orders && $orders->num_rows > 0) {
     }
     setInterval(updateClock, 1000);
     updateClock();
-  </script>
 
-  <script>
     document.getElementById("selectAll").addEventListener("change", function() {
       let checkboxes = document.querySelectorAll("input[name='order_ids[]']");
       checkboxes.forEach(cb => cb.checked = this.checked);

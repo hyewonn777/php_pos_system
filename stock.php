@@ -530,6 +530,10 @@ input:focus, select:focus, textarea:focus {
       <div class="small">CSV File Only: <i>Category, Name, Quantity, Price, Image</i> <b><i>(NOTE: Quantity & Image are optional)</i></b></div>
     </div>
 
+    <!-- Search Bar -->
+        <input type="text" id="searchInput" placeholder="🔍 Search..." 
+      style="padding:15px; width:250px; border-radius:6px; border:1px solid #ccc; margin-bottom:10px; width:100%;"> <div>
+
     <!-- bulk-delete form (separate) -->
     <form id="bulkDeleteForm" method="POST" action="stock.php" style="display:inline-block;margin-bottom:8px;">
       <button type="submit" name="bulk_delete" class="btn" style="background:#e74c3c;color:#fff" onclick="return confirm('Delete selected?')">Delete Selected</button>
@@ -640,6 +644,19 @@ input:focus, select:focus, textarea:focus {
     row.classList.toggle("hidden");
   }
 }
+
+    // Instant search for stock table
+    document.getElementById("searchInput").addEventListener("keyup", function() {
+      const filter = this.value.toLowerCase();
+
+      document.querySelectorAll("table tbody tr").forEach(row => {
+        // Skip hidden edit rows
+        if (row.classList.contains("edit-row")) return;
+
+        const text = row.innerText.toLowerCase();
+        row.style.display = text.includes(filter) ? "" : "none";
+      });
+    });
 
 </script>
 </body>
