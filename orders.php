@@ -43,6 +43,106 @@ if (isset($_POST['create_order'])) {
     header("Location: orders.php"); exit;
 }
 
+/* ---------------- RECEIVE ORDER ---------------- */
+if (isset($_POST['receive_order'])) {
+    $order_id = intval($_POST['receive_order']);
+
+    $conn->begin_transaction();
+    try {
+        // Fetch items
+        $items = [];
+        $itemsQ = $conn->prepare("SELECT product_id, quantity FROM order_items WHERE order_id = ?");
+        $itemsQ->bind_param("i", $order_id);
+        $itemsQ->execute();
+        $result = $itemsQ->get_result();
+        while ($row = $result->fetch_assoc()) {
+            $items[] = $row;
+        }
+        $itemsQ->close();
+
+        foreach ($items as $row) {
+            $product_id  = $row['product_id'];
+            $qty_ordered = $row['quantity'];
+
+            // Deduct stock
+            $updateStock = $conn->prepare("UPDATE stock SET qty = GREATEST(qty - ?, 0) WHERE id = ?");
+            $updateStock->bind_param("ii", $qty_ordered, $product_id);
+            $updateStock->execute();
+            $updateStock->close();
+
+            // Get product price + name
+            $getPrice = $conn->prepare("SELECT name, price FROM stock WHERE id = ?");
+            $getPrice->bind_param("i", $product_id);
+            $getPrice->execute();
+            $getPrice->bind_result($productName, $price);
+            $getPrice->fetch();
+            $getPrice->close();
+
+            // Insert into sales
+            $total = $price * $qty_ordered;
+            $insertSale = $conn->prepare("INSERT INTO sales (product, quantity, total, sale_date, status) VALUES (?, ?, ?, NOW(), 'Pending')");
+            $insertSale->bind_param("sid", $productName, $qty_ordered, $total);
+            $insertSale->execute();
+            $insertSale->close();
+        }
+
+        // Update order status to RECEIVED
+        $updateOrder = $conn->prepare("UPDATE orders SET status='Received' WHERE id=?");
+        $updateOrder->bind_param("i", $order_id);
+        $updateOrder->execute();
+        $updateOrder->close();
+
+        $conn->commit();
+        $_SESSION['flash'] = "Order #$order_id marked as Received!";
+    } catch (Exception $e) {
+        $conn->rollback();
+        $_SESSION['flash'] = "Error receiving order: " . $e->getMessage();
+    }
+
+    header("Location: orders.php");
+    exit;
+}
+
+
+/* ---------------- CANCEL ORDERS ---------------- */
+if (isset($_POST['cancel_orders']) && !empty($_POST['order_ids'])) {
+    $order_ids = $_POST['order_ids'];
+    $note = trim($_POST['cancellation_note'] ?? 'Cancelled by admin');
+
+    $placeholders = implode(',', array_fill(0, count($order_ids), '?'));
+    $types = str_repeat('i', count($order_ids));
+
+    $conn->begin_transaction();
+    try {
+        // Mark orders as cancelled with note
+        $sql = "UPDATE orders SET status='Cancelled', cancellation_note=? WHERE id IN ($placeholders)";
+        $stmt = $conn->prepare($sql);
+
+        // Bind dynamically (1 string + many ints)
+        $bindTypes = "s" . $types;
+        $params = array_merge([$bindTypes, $note], $order_ids);
+
+        // Trick: use call_user_func_array for dynamic bind
+        $tmp = [];
+        foreach ($params as $key => $value) {
+            $tmp[$key] = &$params[$key];
+        }
+        call_user_func_array([$stmt, 'bind_param'], $tmp);
+
+        $stmt->execute();
+        $stmt->close();
+
+        $conn->commit();
+        $_SESSION['flash'] = "Selected orders cancelled!";
+    } catch (Exception $e) {
+        $conn->rollback();
+        $_SESSION['flash'] = "Error cancelling orders: " . $e->getMessage();
+    }
+
+    header("Location: orders.php");
+    exit;
+}
+
 /* ---------------- CONFIRM ORDER ---------------- */
 if (isset($_POST['confirm_order'])) {
     $order_id = intval($_POST['confirm_order']);
@@ -437,7 +537,7 @@ if (isset($_POST['delete_orders']) && !empty($_POST['order_ids'])) {
     <ul>
       <li><a href="index.php">Dashboard</a></li>
       <li><a href="sales.php">Sales Tracking</a></li>
-      <li><a href="orders.php">Order Tracking</a></li>
+      <li><a href="orders.php">Purchase Order Tracking</a></li>
       <li><a href="stock.php">Inventory</a></li>
       <li><a href="appointment.php">Appointments</a></li>
       <li><a href="user_management.php">Account</a></li>
@@ -507,9 +607,14 @@ if (isset($_POST['delete_orders']) && !empty($_POST['order_ids'])) {
         <td>₱<?= number_format($total, 2); ?></td>
         <td><?= $order['status']; ?></td>
         <td>
-            <?php if ($order['status'] != 'Confirmed') { ?>
-                <button type="submit" name="confirm_order" value="<?= $order['id']; ?>">Confirm</button>
-            <?php } else { echo "Approved"; } ?>
+            <?php if ($order['status'] === 'Pending') { ?>
+                <button type="submit" name="receive_order" value="<?= $order['id']; ?>">Mark Received</button>
+            <?php } elseif ($order['status'] === 'Received') { ?>
+                <span style="color:green;">Received</span>
+            <?php } elseif ($order['status'] === 'Cancelled') { ?>
+                <span style="color:red;">Cancelled</span><br>
+                <small><?= htmlspecialchars($order['cancellation_note']); ?></small>
+            <?php } ?>
         </td>
     </tr>
     <?php

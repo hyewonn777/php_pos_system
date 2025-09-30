@@ -106,6 +106,7 @@ while ($row = $res->fetch_assoc()) {
     ];
 }
 $events_json = json_encode($events);  
+$result = $conn->query("SELECT * FROM appointments ORDER BY created_at DESC");
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -290,29 +291,60 @@ $events_json = json_encode($events);
       background:#219150;
     }
 
-    table {
-      width:100%;
-      margin-top:20px;
-      border-collapse:collapse;
-    }
+    /* Modern Table Styling */
+table {
+  width: 100%;
+  margin-top: 20px;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--card-bg);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  font-size: 14px;
+}
 
-    table,th,td {
-      border:1px solid #ccc;
-    }
+table thead {
+  background: var(--button-bg);
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
 
-    th,td {
-      padding: 3px; 
-      text-align: center;
-    }
+table th, 
+table td {
+  padding: 12px 15px;
+  text-align: center;
+}
 
-    #calendar { 
-      max-width: 900px; 
-      margin: 30px auto; 
-      background: var(--card-bg); 
-      padding: 15px; 
-      border-radius: 
-      10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
-    }
+table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background 0.2s ease;
+}
+
+table tbody tr:nth-child(even) {
+  background: rgba(0,0,0,0.02);
+}
+
+.dark table tbody tr:nth-child(even) {
+  background: rgba(255,255,255,0.05);
+}
+
+table tbody tr:hover {
+  background: rgba(52, 152, 219, 0.1);
+}
+
+table td button {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+table td form {
+  display: inline-block;
+  margin: 2px;
+}
+
 
   #eventModal {
     display: none;
@@ -401,7 +433,6 @@ button:hover, .btn:hover {
 
 
 }
-
     </style>
 </head>
 <body>
@@ -413,7 +444,7 @@ button:hover, .btn:hover {
     <ul>
       <li><a href="index.php">Dashboard</a></li>
       <li><a href="sales.php">Sales Tracking</a></li>
-      <li><a href="orders.php">Order Tracking</a></li>
+      <li><a href="orders.php">Purchase Order Tracking</a></li>
       <li><a href="stock.php">Inventory</a></li>
       <li><a href="appointment.php">Appointments</a></li>
       <li><a href="user_management.php">Account</a></li>
@@ -621,6 +652,59 @@ setInterval(updateClock, 1000);
 updateClock();
 
   </script>
+
+  <?php
+// get the latest appointment ID
+$latest = $conn->query("SELECT MAX(id) as last_id FROM appointments")->fetch_assoc();
+$lastId = $latest['last_id'] ?? 0;
+?>
+<script>
+let lastId = <?= $lastId ?>;
+
+setInterval(async () => {
+  try {
+    const res = await fetch("check_new_appointments.php?last_id=" + lastId);
+    const data = await res.json();
+    if (data.new) {
+      alert("🔔 New booking request received from " + data.customer_name);
+      lastId = data.last_id;
+      location.reload(); // refresh table automatically
+    }
+  } catch (e) {
+    console.error("Error checking new appointments", e);
+  }
+}, 10000); // check every 10 seconds
+</script>
+<script>
+// Fetch appointments every 2 seconds
+async function loadAppointments() {
+    try {
+        const res = await fetch('appointments_list.php');
+        const data = await res.json();
+        const table = document.getElementById('appointments-table');
+
+        // Remove old rows
+        table.querySelectorAll('tr:not(:first-child)').forEach(r => r.remove());
+
+        // Add new rows
+        data.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${row.id}</td>
+                            <td>${row.customer}</td>
+                            <td>${row.event_date}</td>
+                            <td>${row.start_time}</td>
+                            <td>${row.end_time}</td>
+                            <td>${row.location}</td>`;
+            table.appendChild(tr);
+        });
+    } catch(err) {
+        console.error(err);
+    }
+}
+setInterval(loadAppointments, 2000);
+loadAppointments();
+</script>
+
 
 <?php if (!empty($_SESSION['flash'])): ?>
   <div class="flash-msg">

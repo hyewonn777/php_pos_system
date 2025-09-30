@@ -274,7 +274,7 @@ if (is_array($users)) {
     <ul>
       <li><a href="index.php">Dashboard</a></li>
       <li><a href="sales.php">Sales Tracking</a></li>
-      <li><a href="orders.php">Order Tracking</a></li>
+      <li><a href="orders.php">Purchase Order Tracking</a></li>
       <li><a href="stock.php">Inventory</a></li>
       <li><a href="appointment.php">Appointments</a></li>
       <li><a href="user_management.php">Account</a></li>
