@@ -7,60 +7,36 @@ function setFlash($msg, $type = 'success') {
     $_SESSION['flash'] = ['message' => $msg, 'type' => $type];
 }
 
-/* ---------------- CREATE ORDER ---------------- */
-if (isset($_POST['create_order'])) {
-    $customer_name = trim($_POST['customer_name']);
-    $items = $_POST['items'] ?? [];
-
-    if (empty($items)) {
-        setFlash("No items selected!", 'error');
-        header("Location: orders.php");
-        exit;
-    }
-
+/* ---------------- CONFIRM ORDER ---------------- */
+if (isset($_POST['action']) && $_POST['action'] == 'confirm_order' && isset($_POST['order_id'])) {
+    $order_id = intval($_POST['order_id']);
+    
+    error_log("Confirm order called for ID: " . $order_id); // Debug
+    
     $conn->begin_transaction();
     try {
-        // Attach session username + role
-        $username = $_SESSION['username'] ?? 'guest';
-        $role     = $_SESSION['role'] ?? 'customer';
-
-        $stmt = $conn->prepare("
-            INSERT INTO orders (customer_name, username, role, status) 
-            VALUES (?, ?, ?, 'Pending')
-        ");
-        if (!$stmt) throw new Exception("Prepare failed (orders): " . $conn->error);
-        $stmt->bind_param("sss", $customer_name, $username, $role);
+        // Update order status to Confirmed
+        $stmt = $conn->prepare("UPDATE orders SET status='Confirmed' WHERE id=?");
+        $stmt->bind_param("i", $order_id);
         $stmt->execute();
-        $order_id = $conn->insert_id;
-        $stmt->close();
-
-        // Save order items
-        $stmt = $conn->prepare("INSERT INTO order_items (order_id, product_id, quantity) VALUES (?, ?, ?)");
-        if (!$stmt) throw new Exception("Prepare failed (order_items): " . $conn->error);
-
-        foreach ($items as $product_id => $qty) {
-            if ($qty > 0) {
-                $stmt->bind_param("iii", $order_id, $product_id, $qty);
-                $stmt->execute();
-            }
-        }
         $stmt->close();
 
         $conn->commit();
-        setFlash("Order #$order_id created successfully!");
+        setFlash("Order #$order_id confirmed successfully!");
     } catch (Exception $e) {
         $conn->rollback();
-        setFlash("Error creating order: " . $e->getMessage(), 'error');
+        setFlash("Error confirming order: " . $e->getMessage(), 'error');
     }
 
     header("Location: orders.php");
     exit;
 }
 
-/* ---------------- CONFIRM OR RECEIVE ORDER ---------------- */
-if (isset($_POST['confirm_order']) || isset($_POST['receive_order'])) {
-    $order_id = intval($_POST['confirm_order'] ?? $_POST['receive_order']);
-    $new_status = isset($_POST['confirm_order']) ? 'Confirmed' : 'Received';
+/* ---------------- RECEIVE ORDER ---------------- */
+if (isset($_POST['action']) && $_POST['action'] == 'receive_order' && isset($_POST['order_id'])) {
+    $order_id = intval($_POST['order_id']);
+
+    error_log("Receive order called for ID: " . $order_id); // Debug
 
     $conn->begin_transaction();
     try {
@@ -91,55 +67,23 @@ if (isset($_POST['confirm_order']) || isset($_POST['receive_order'])) {
             $stmt->close();
 
             $total = $price * $qty;
-            $stmt = $conn->prepare("INSERT INTO sales (product, quantity, total, sale_date, status) VALUES (?, ?, ?, NOW(), 'Pending')");
+            $stmt = $conn->prepare("INSERT INTO sales (product, quantity, total, sale_date, status) VALUES (?, ?, ?, NOW(), 'paid')");
             $stmt->bind_param("sid", $product_name, $qty, $total);
             $stmt->execute();
             $stmt->close();
         }
 
-        // Update order status
-        $stmt = $conn->prepare("UPDATE orders SET status=? WHERE id=?");
-        $stmt->bind_param("si", $new_status, $order_id);
+        // Update order status to Received
+        $stmt = $conn->prepare("UPDATE orders SET status='Received' WHERE id=?");
+        $stmt->bind_param("i", $order_id);
         $stmt->execute();
         $stmt->close();
 
         $conn->commit();
-        setFlash("Order #$order_id marked as $new_status!");
+        setFlash("Order #$order_id marked as received!");
     } catch (Exception $e) {
         $conn->rollback();
-        setFlash("Error updating order: " . $e->getMessage(), 'error');
-    }
-
-    header("Location: orders.php");
-    exit;
-}
-
-/* ---------------- CANCEL ORDERS ---------------- */
-if (isset($_POST['cancel_orders']) && !empty($_POST['order_ids'])) {
-    $order_ids = $_POST['order_ids'];
-    $note = trim($_POST['cancellation_note'] ?? 'Cancelled by admin');
-    $placeholders = implode(',', array_fill(0, count($order_ids), '?'));
-    $types = str_repeat('i', count($order_ids));
-
-    $conn->begin_transaction();
-    try {
-        $stmt = $conn->prepare("UPDATE orders SET status='Cancelled', cancellation_note=? WHERE id IN ($placeholders)");
-        $params = array_merge([$note], $order_ids);
-
-        $bind_types = "s" . str_repeat("i", count($order_ids));
-        $bindParams = array_merge([$bind_types], $params);
-        $refs = [];
-        foreach ($bindParams as $k => $v) $refs[$k] = &$bindParams[$k];
-
-        call_user_func_array([$stmt, 'bind_param'], $refs);
-        $stmt->execute();
-        $stmt->close();
-
-        $conn->commit();
-        setFlash("Selected orders cancelled!");
-    } catch (Exception $e) {
-        $conn->rollback();
-        setFlash("Error cancelling orders: " . $e->getMessage(), 'error');
+        setFlash("Error receiving order: " . $e->getMessage(), 'error');
     }
 
     header("Location: orders.php");
@@ -154,33 +98,13 @@ if (isset($_POST['delete_orders']) && !empty($_POST['order_ids'])) {
 
     $conn->begin_transaction();
     try {
-        // Optional: Restock confirmed orders
-        $stmt = $conn->prepare("SELECT id FROM orders WHERE status='Confirmed' AND id IN ($placeholders)");
-        $stmt->bind_param($types, ...$order_ids);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        while ($row = $result->fetch_assoc()) {
-            $confirmed_id = $row['id'];
-
-            $restockQ = $conn->prepare("SELECT product_id, quantity FROM order_items WHERE order_id=?");
-            $restockQ->bind_param("i", $confirmed_id);
-            $restockQ->execute();
-            $res2 = $restockQ->get_result();
-            while ($item = $res2->fetch_assoc()) {
-                $conn->query("UPDATE stock SET qty = qty + {$item['quantity']} WHERE id={$item['product_id']}");
-            }
-            $restockQ->close();
-
-            $conn->query("UPDATE sales SET status='Cancelled' WHERE sale_date IN (SELECT created_at FROM orders WHERE id=$confirmed_id)");
-        }
-        $stmt->close();
-
-        // Delete order items & orders
+        // Delete order items first
         $delItems = $conn->prepare("DELETE FROM order_items WHERE order_id IN ($placeholders)");
         $delItems->bind_param($types, ...$order_ids);
         $delItems->execute();
         $delItems->close();
 
+        // Delete orders
         $delOrders = $conn->prepare("DELETE FROM orders WHERE id IN ($placeholders)");
         $delOrders->bind_param($types, ...$order_ids);
         $delOrders->execute();
@@ -203,14 +127,8 @@ $confirmedCount = $conn->query("SELECT COUNT(*) as cnt FROM orders WHERE status=
 $receivedCount = $conn->query("SELECT COUNT(*) as cnt FROM orders WHERE status='Received'")->fetch_assoc()['cnt'];
 $cancelledCount = $conn->query("SELECT COUNT(*) as cnt FROM orders WHERE status='Cancelled'")->fetch_assoc()['cnt'];
 
-// Get recent orders for dashboard
-$recentOrders = [];
-$result = $conn->query("SELECT * FROM orders ORDER BY created_at DESC LIMIT 5");
-if ($result && $result->num_rows > 0) {
-    while($row = $result->fetch_assoc()) {
-        $recentOrders[] = $row;
-    }
-}
+// Get all orders for display
+$orders = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -908,8 +826,14 @@ if ($result && $result->num_rows > 0) {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+
+    /* Hidden form for individual actions */
+    #actionForm {
+      display: none;
+    }
   </style>
 </head>
+<body>
   <div class="container">
     <!-- Sidebar -->
     <div class="sidebar">
@@ -1029,13 +953,20 @@ if ($result && $result->num_rows > 0) {
         </div>
       </div>
 
+      <!-- Hidden form for individual actions -->
+      <form method="POST" id="actionForm">
+        <input type="hidden" name="action" id="formAction">
+        <input type="hidden" name="order_id" id="formOrderId">
+      </form>
+
       <!-- Orders Table -->
       <div class="orders-table-container">
         <div class="section-header">
           <div class="section-title">Order Records</div>
         </div>
         
-        <form method="POST">
+        <!-- Bulk Delete Form -->
+        <form method="POST" id="bulkDeleteForm" style="margin-bottom: 20px;">
           <div class="table-actions">
             <div class="search-box">
               <i class="fas fa-search"></i>
@@ -1059,70 +990,77 @@ if ($result && $result->num_rows > 0) {
                 <th>Items</th>
                 <th>Total</th>
                 <th>Status</th>
+                <th>Date</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              <?php
-              $orders = $conn->query("SELECT * FROM orders ORDER BY id ASC");
+              <?php if ($orders && $orders->num_rows > 0): ?>
+                <?php while ($order = $orders->fetch_assoc()): ?>
+                  <?php
+                  $itemsList = [];
+                  $total = 0;
 
-              if ($orders && $orders->num_rows > 0) {
-                  while ($order = $orders->fetch_assoc()) {
-                      $itemsList = [];
-                      $total = 0;
+                  $itemsRes = $conn->prepare("SELECT oi.quantity, s.name, s.price 
+                                              FROM order_items oi
+                                              JOIN stock s ON s.id = oi.product_id
+                                              WHERE oi.order_id = ?");
+                  $itemsRes->bind_param("i", $order['id']);
+                  $itemsRes->execute();
+                  $itemsRes->bind_result($qty, $name, $price);
 
-                      $itemsRes = $conn->prepare("SELECT oi.quantity, s.name, s.price 
-                                                  FROM order_items oi
-                                                  JOIN stock s ON s.id = oi.product_id
-                                                  WHERE oi.order_id = ?");
-                      $itemsRes->bind_param("i", $order['id']);
-                      $itemsRes->execute();
-                      $itemsRes->bind_result($qty, $name, $price);
-
-                      while ($itemsRes->fetch()) {
-                          $itemsList[] = "{$qty}x {$name}";
-                          $total += $qty * $price;
-                      }
-                      $itemsRes->close();
-              ?>
-              <tr class="order-row" data-status="<?= $order['status']; ?>">
-                  <td class="checkbox-cell">
-                    <input type="checkbox" name="order_ids[]" value="<?= $order['id']; ?>">
-                  </td>
-                  <td>#<?= $order['id']; ?></td>
-                  <td><?= htmlspecialchars($order['customer_name']); ?></td>
-                  <td><?= !empty($itemsList) ? implode(", ", $itemsList) : "No items"; ?></td>
-                  <td>₱<?= number_format($total, 2); ?></td>
-                  <td>
-                    <span class="status-badge status-<?= strtolower($order['status']); ?>">
-                      <?= $order['status']; ?>
-                    </span>
-                  </td>
-                  <td class="action-cell">
-                    <?php if ($order['status'] === 'Pending') { ?>
-                      <button type="submit" name="receive_order" value="<?= $order['id']; ?>" class="action-btn success">
-                        <i class="fas fa-check"></i> Mark Received
-                      </button>
-                    <?php } elseif ($order['status'] === 'Received') { ?>
-                      <span style="color: var(--success);">
-                        <i class="fas fa-check-circle"></i> Received
-                      </span>
-                    <?php } elseif ($order['status'] === 'Cancelled') { ?>
-                      <span style="color: var(--danger);">
-                        <i class="fas fa-times-circle"></i> Cancelled
-                      </span>
-                      <?php if (!empty($order['cancellation_note'])): ?>
-                        <br><small><?= htmlspecialchars($order['cancellation_note']); ?></small>
-                      <?php endif; ?>
-                    <?php } ?>
-                  </td>
-              </tr>
-              <?php
+                  while ($itemsRes->fetch()) {
+                      $itemsList[] = "{$qty}x {$name}";
+                      $total += $qty * $price;
                   }
-              } else {
-                  echo "<tr><td colspan='7' style='text-align:center;'>No orders found.</td></tr>";
-              }
-              ?>
+                  $itemsRes->close();
+                  ?>
+                  <tr class="order-row" data-status="<?= $order['status']; ?>">
+                    <td class="checkbox-cell">
+                      <input type="checkbox" name="order_ids[]" value="<?= $order['id']; ?>">
+                    </td>
+                    <td>#<?= $order['id']; ?></td>
+                    <td><?= htmlspecialchars($order['customer_name']); ?></td>
+                    <td><?= !empty($itemsList) ? implode(", ", $itemsList) : "No items"; ?></td>
+                    <td>₱<?= number_format($total, 2); ?></td>
+                    <td>
+                      <span class="status-badge status-<?= strtolower($order['status']); ?>">
+                        <?= $order['status']; ?>
+                      </span>
+                    </td>
+                    <td><?= date('M j, Y', strtotime($order['created_at'])); ?></td>
+                    <td class="action-cell">
+                      <?php if ($order['status'] === 'Pending'): ?>
+                        <button type="button" class="action-btn success" onclick="confirmOrder(<?= $order['id']; ?>)">
+                          <i class="fas fa-check"></i> Confirm
+                        </button>
+                        <button type="button" class="action-btn success" onclick="receiveOrder(<?= $order['id']; ?>)">
+                          <i class="fas fa-truck"></i> Receive
+                        </button>
+                      <?php elseif ($order['status'] === 'Confirmed'): ?>
+                        <button type="button" class="action-btn success" onclick="receiveOrder(<?= $order['id']; ?>)">
+                          <i class="fas fa-truck"></i> Receive
+                        </button>
+                      <?php elseif ($order['status'] === 'Received'): ?>
+                        <span style="color: var(--success);">
+                          <i class="fas fa-check-circle"></i> Received
+                        </span>
+                      <?php elseif ($order['status'] === 'Cancelled'): ?>
+                        <span style="color: var(--danger);">
+                          <i class="fas fa-times-circle"></i> Cancelled
+                        </span>
+                        <?php if (!empty($order['cancellation_note'])): ?>
+                          <br><small><?= htmlspecialchars($order['cancellation_note']); ?></small>
+                        <?php endif; ?>
+                      <?php endif; ?>
+                    </td>
+                  </tr>
+                <?php endwhile; ?>
+              <?php else: ?>
+                <tr>
+                  <td colspan="8" style="text-align: center;">No orders found.</td>
+                </tr>
+              <?php endif; ?>
             </tbody>
           </table>
         </form>
@@ -1191,7 +1129,7 @@ if (themeToggle) {
 const selectAll = document.getElementById('selectAll');
 if (selectAll) {
   selectAll.addEventListener('change', function() {
-    const checkboxes = document.querySelectorAll('input[name="selected[]"]'); // Fixed: was "order_ids[]"
+    const checkboxes = document.querySelectorAll('input[name="order_ids[]"]');
     checkboxes.forEach(cb => {
       cb.checked = this.checked;
       // Add visual feedback for selected rows
@@ -1203,20 +1141,29 @@ if (selectAll) {
   });
 }
 
-// Row selection feedback for inventory table
+// Row selection feedback for orders table
 document.addEventListener('DOMContentLoaded', function() {
-  const checkboxes = document.querySelectorAll('input[name="selected[]"]');
+  const checkboxes = document.querySelectorAll('input[name="order_ids[]"]');
   checkboxes.forEach(checkbox => {
     checkbox.addEventListener('change', function() {
       const row = this.closest('tr');
       if (row) {
         row.style.backgroundColor = this.checked ? 'rgba(67, 97, 238, 0.05)' : '';
       }
+      
+      // Update select all checkbox state
+      const allChecked = document.querySelectorAll('input[name="order_ids[]"]:checked').length === checkboxes.length;
+      const someChecked = document.querySelectorAll('input[name="order_ids[]"]:checked').length > 0;
+      
+      if (selectAll) {
+        selectAll.checked = allChecked;
+        selectAll.indeterminate = someChecked && !allChecked;
+      }
     });
   });
 });
 
-// Enhanced Instant Search for products table
+// Enhanced Instant Search for orders table
 const searchInput = document.getElementById('searchInput');
 if (searchInput) {
   let searchTimeout;
@@ -1224,12 +1171,9 @@ if (searchInput) {
     clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
       const filter = this.value.toLowerCase();
-      const rows = document.querySelectorAll('.table tbody tr');
+      const rows = document.querySelectorAll('.orders-table tbody tr');
       
       rows.forEach((row, index) => {
-        // Skip edit rows
-        if (row.classList.contains('edit-row')) return;
-        
         const matches = row.textContent.toLowerCase().includes(filter);
         
         // Smooth animation
@@ -1253,7 +1197,7 @@ if (searchInput) {
   });
 }
 
-// Enhanced Filter for orders by status (if you have order filtering)
+// Enhanced Filter for orders by status
 function filterOrders(status) {
   const rows = document.querySelectorAll('.order-row');
   if (rows.length === 0) return; // Exit if no order rows found
@@ -1299,6 +1243,23 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
+// Order Action Functions
+function confirmOrder(orderId) {
+    if (confirm('Confirm order #' + orderId + '?')) {
+        document.getElementById('formAction').value = 'confirm_order';
+        document.getElementById('formOrderId').value = orderId;
+        document.getElementById('actionForm').submit();
+    }
+}
+
+function receiveOrder(orderId) {
+    if (confirm('Mark order #' + orderId + ' as received?')) {
+        document.getElementById('formAction').value = 'receive_order';
+        document.getElementById('formOrderId').value = orderId;
+        document.getElementById('actionForm').submit();
+    }
+}
+
 // Add loading state to form submissions
 document.addEventListener('DOMContentLoaded', function() {
   const forms = document.querySelectorAll('form');
@@ -1321,24 +1282,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   });
 });
-
-// Toggle Edit Row function (for your inventory table)
-function toggleEditRow(id) {
-  const row = document.getElementById("edit-row-" + id);
-  if (row) {
-    row.classList.toggle("hidden");
-    
-    // Smooth animation for edit row
-    if (!row.classList.contains("hidden")) {
-      row.style.opacity = '0';
-      row.style.transform = 'translateY(-10px)';
-      setTimeout(() => {
-        row.style.opacity = '1';
-        row.style.transform = 'translateY(0)';
-      }, 10);
-    }
-  }
-}
   </script>
 </body>
 </html>

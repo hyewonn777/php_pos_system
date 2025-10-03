@@ -70,8 +70,7 @@
               "RelativeToolTip": "website\\checkout.php",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAO8AAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-10-03T05:13:43.285Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-10-03T05:13:43.285Z"
             },
             {
               "$type": "Document",
@@ -83,8 +82,7 @@
               "RelativeToolTip": "db.php",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAwAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-22T08:22:08.984Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-09-22T08:22:08.984Z"
             },
             {
               "$type": "Document",
@@ -96,8 +94,7 @@
               "RelativeToolTip": "stock.php",
               "ViewState": "AgIAAFkDAAAAAAAAAAAUwHEDAAAMAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-21T03:52:27.158Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-09-21T03:52:27.158Z"
             },
             {
               "$type": "Document",
@@ -107,7 +104,7 @@
               "RelativeDocumentMoniker": "index.php",
               "ToolTip": "C:\\xampp\\htdocs\\pos\\index.php",
               "RelativeToolTip": "index.php",
-              "ViewState": "AgIAAA0DAAAAAAAAAAAkwCADAAAdAAAAAAAAAA==",
+              "ViewState": "AgIAAF0DAAAAAAAAAAAqwIEDAAAHAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
               "WhenOpened": "2025-09-13T14:45:17.922Z",
               "EditorCaption": ""
@@ -122,8 +119,7 @@
               "RelativeToolTip": "orders.php",
               "ViewState": "AgIAAIkEAAAAAAAAAAAUwKMEAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-13T14:46:05.409Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-09-13T14:46:05.409Z"
             },
             {
               "$type": "Document",
@@ -135,8 +131,7 @@
               "RelativeToolTip": "auth.php",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAAoAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-15T09:58:57.187Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-09-15T09:58:57.187Z"
             },
             {
               "$type": "Document",
@@ -148,8 +143,7 @@
               "RelativeToolTip": "user_management.php",
               "ViewState": "AgIAALQCAAAAAAAAAAAUwMwCAAAMAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-15T05:22:44.699Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-09-15T05:22:44.699Z"
             },
             {
               "$type": "Document",
@@ -161,8 +155,7 @@
               "RelativeToolTip": "login.php",
               "ViewState": "AgIAAB4AAAAAAAAAAAAAABcAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-14T03:25:12.253Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-09-14T03:25:12.253Z"
             },
             {
               "$type": "Document",
@@ -174,8 +167,7 @@
               "RelativeToolTip": "appointment.php",
               "ViewState": "AgIAAPACAAAAAAAAAAAUwAgDAAAMAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-15T02:02:17.074Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-09-15T02:02:17.074Z"
             },
             {
               "$type": "Document",
@@ -187,8 +179,7 @@
               "RelativeToolTip": "sales.php",
               "ViewState": "AgIAAAAAAAAAAAAAAAAAAB0AAAAFAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-13T14:45:38.986Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-09-13T14:45:38.986Z"
             },
             {
               "$type": "Document",
@@ -200,8 +191,7 @@
               "RelativeToolTip": "css\\admin.css",
               "ViewState": "AgIAAA0DAAAAAAAAAAAkwDMDAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.003000|",
-              "WhenOpened": "2025-09-17T11:50:37.414Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-09-17T11:50:37.414Z"
             }
           ]
         }
