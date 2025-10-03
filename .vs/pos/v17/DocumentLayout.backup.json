@@ -3,6 +3,26 @@
   "WorkspaceRootPath": "C:\\xampp\\htdocs\\pos\\",
   "Documents": [
     {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\orders.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:orders.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\website\\checkout.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:website\\checkout.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\index.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:index.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\stock.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:stock.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\buy_product.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
+      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:buy_product.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
+    },
+    {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\appointment.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:appointment.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
     },
@@ -11,24 +31,8 @@
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:user_management.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\stock.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:stock.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\index.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:index.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\sales.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:sales.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\orders.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:orders.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\website\\index.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:website\\index.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\db.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
@@ -41,10 +45,6 @@
     {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\auth.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
       "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:auth.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\buy_product.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
-      "RelativeMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|solutionrelative:buy_product.php||{3B902123-F8A7-4915-9F01-361F908088D0}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\xampp\\htdocs\\pos\\sample.php||{3B902123-F8A7-4915-9F01-361F908088D0}",
@@ -62,7 +62,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 11,
+          "SelectedChildIndex": 6,
           "Children": [
             {
               "$type": "Bookmark",
@@ -70,19 +70,19 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 6,
-              "Title": "index.php",
-              "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\website\\index.php",
-              "RelativeDocumentMoniker": "website\\index.php",
-              "ToolTip": "C:\\xampp\\htdocs\\pos\\website\\index.php",
-              "RelativeToolTip": "website\\index.php",
-              "ViewState": "AgIAAPMEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "DocumentIndex": 1,
+              "Title": "checkout.php",
+              "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\website\\checkout.php",
+              "RelativeDocumentMoniker": "website\\checkout.php",
+              "ToolTip": "C:\\xampp\\htdocs\\pos\\website\\checkout.php",
+              "RelativeToolTip": "website\\checkout.php",
+              "ViewState": "AgIAAN4AAAAAAAAAAAAqwO8AAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-24T05:43:56.203Z"
+              "WhenOpened": "2025-10-03T05:13:43.285Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 7,
+              "DocumentIndex": 8,
               "Title": "db.php",
               "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\db.php",
               "RelativeDocumentMoniker": "db.php",
@@ -94,55 +94,56 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
+              "DocumentIndex": 3,
               "Title": "stock.php",
               "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\stock.php",
               "RelativeDocumentMoniker": "stock.php",
               "ToolTip": "C:\\xampp\\htdocs\\pos\\stock.php",
               "RelativeToolTip": "stock.php",
-              "ViewState": "AgIAAM0BAAAAAAAAAAAowN0BAAAJAAAAAAAAAA==",
+              "ViewState": "AgIAAGcCAAAAAAAAAAAkwG4CAABOAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
               "WhenOpened": "2025-09-21T03:52:27.158Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 10,
-              "Title": "buy_product.php",
-              "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\buy_product.php",
-              "RelativeDocumentMoniker": "buy_product.php",
-              "ToolTip": "C:\\xampp\\htdocs\\pos\\buy_product.php",
-              "RelativeToolTip": "buy_product.php",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAADUAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-21T04:19:34.575Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
+              "DocumentIndex": 2,
               "Title": "index.php",
               "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\index.php",
               "RelativeDocumentMoniker": "index.php",
               "ToolTip": "C:\\xampp\\htdocs\\pos\\index.php",
               "RelativeToolTip": "index.php",
-              "ViewState": "AgIAAJ0AAAAAAAAAAAAAAK0AAAAJAAAAAAAAAA==",
+              "ViewState": "AgIAAK0AAAAAAAAAAAAAAL8AAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
               "WhenOpened": "2025-09-13T14:45:17.922Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 5,
+              "DocumentIndex": 4,
+              "Title": "buy_product.php",
+              "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\buy_product.php",
+              "RelativeDocumentMoniker": "buy_product.php",
+              "ToolTip": "C:\\xampp\\htdocs\\pos\\buy_product.php",
+              "RelativeToolTip": "buy_product.php",
+              "ViewState": "AgIAADMAAAAAAAAAAAAAADUAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2025-09-21T04:19:34.575Z"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
               "Title": "orders.php",
               "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\orders.php",
               "RelativeDocumentMoniker": "orders.php",
               "ToolTip": "C:\\xampp\\htdocs\\pos\\orders.php",
               "RelativeToolTip": "orders.php",
-              "ViewState": "AgIAAAoCAAAAAAAAAAAhwBkCAAAwAAAAAAAAAA==",
+              "ViewState": "AgIAAFcAAAAAAAAAAAAAACgCAAAFAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-13T14:46:05.409Z"
+              "WhenOpened": "2025-09-13T14:46:05.409Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 9,
+              "DocumentIndex": 10,
               "Title": "auth.php",
               "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\auth.php",
               "RelativeDocumentMoniker": "auth.php",
@@ -166,7 +167,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 6,
               "Title": "user_management.php",
               "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\user_management.php",
               "RelativeDocumentMoniker": "user_management.php",
@@ -190,7 +191,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 5,
               "Title": "appointment.php",
               "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\appointment.php",
               "RelativeDocumentMoniker": "appointment.php",
@@ -198,12 +199,11 @@
               "RelativeToolTip": "appointment.php",
               "ViewState": "AgIAADgBAAAAAAAAAADwv1kBAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2025-09-15T02:02:17.074Z",
-              "EditorCaption": ""
+              "WhenOpened": "2025-09-15T02:02:17.074Z"
             },
             {
               "$type": "Document",
-              "DocumentIndex": 4,
+              "DocumentIndex": 7,
               "Title": "sales.php",
               "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\sales.php",
               "RelativeDocumentMoniker": "sales.php",
@@ -215,7 +215,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 8,
+              "DocumentIndex": 9,
               "Title": "admin.css",
               "DocumentMoniker": "C:\\xampp\\htdocs\\pos\\css\\admin.css",
               "RelativeDocumentMoniker": "css\\admin.css",
