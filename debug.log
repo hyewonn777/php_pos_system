@@ -1,0 +1,96 @@
+2025-10-06 11:09:08 - POST Request: Array
+(
+    [edit_id] => 703
+    [category] => Drinkware
+    [name] => Magic Mug
+    [qty] => 1000
+    [price] => 300.00
+)
+
+2025-10-06 11:09:08 - FILES Data: Array
+(
+    [image] => Array
+        (
+            [name] => 
+            [type] => 
+            [tmp_name] => 
+            [error] => 4
+            [size] => 0
+        )
+
+)
+
+2025-10-06 11:09:08 - Page loaded successfully. Products: 68
+2025-10-06 11:10:11 - POST Request: Array
+(
+    [bulk_delete] => 
+    [selected] => Array
+        (
+            [0] => 770
+        )
+
+)
+
+2025-10-06 11:10:11 - Bulk delete triggered
+2025-10-06 11:10:11 - Deleting IDs: 770
+2025-10-06 11:10:11 - Bulk delete successful
+2025-10-06 11:10:11 - Page loaded successfully. Products: 67
+2025-10-06 11:12:26 - Page loaded successfully. Products: 67
+2025-10-06 11:12:46 - POST Request: Array
+(
+    [category] => Printing & Stationery
+    [name] => Invitation Card
+    [qty] => 100
+    [price] => 40
+    [add_product] => 
+)
+
+2025-10-06 11:12:46 - FILES Data: Array
+(
+    [image] => Array
+        (
+            [name] => 
+            [type] => 
+            [tmp_name] => 
+            [error] => 4
+            [size] => 0
+        )
+
+)
+
+2025-10-06 11:12:46 - Add product triggered
+2025-10-06 11:12:46 - Adding product - Category: Printing & Stationery, Name: Invitation Card, Qty: 100, Price: 40
+2025-10-06 11:12:46 - Product added successfully
+2025-10-06 11:12:46 - Page loaded successfully. Products: 68
+2025-10-06 11:12:54 - POST Request: Array
+(
+    [edit_id] => 771
+    [category] => Printing & Stationery
+    [name] => Invitation Card
+    [qty] => 101
+    [price] => 40.00
+    [update_product] => 
+)
+
+2025-10-06 11:12:54 - FILES Data: Array
+(
+    [image] => Array
+        (
+            [name] => 
+            [type] => 
+            [tmp_name] => 
+            [error] => 4
+            [size] => 0
+        )
+
+)
+
+2025-10-06 11:12:54 - Update product triggered
+2025-10-06 11:12:54 - Updating product ID: 771, Category: Printing & Stationery, Name: Invitation Card, Qty: 101, Price: 40
+2025-10-06 11:12:54 - Product update successful
+2025-10-06 11:12:54 - Page loaded successfully. Products: 68
+2025-10-06 13:40:50 - Page loaded successfully. Products: 68
+2025-10-07 02:16:44 - Page loaded successfully. Products: 68
+2025-10-07 06:14:37 - Page loaded successfully. Products: 68
+2025-10-07 06:36:03 - Page loaded successfully. Products: 68
+2025-10-07 07:21:33 - Page loaded successfully. Products: 68

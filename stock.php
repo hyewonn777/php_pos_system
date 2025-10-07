@@ -3,105 +3,137 @@ require 'auth.php';
 require 'db.php';
 if (session_status() === PHP_SESSION_NONE) session_start();
 
-// Show all PHP errors while debugging (remove in production)
+// Enhanced error reporting
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-/* ---------------- API MODE ---------------- */
-if (isset($_GET['api']) && $_GET['api'] === '1') {
-    $products = [];
-    $res = $conn->query("SELECT SUM(qty) AS total_qty, SUM(price*qty) AS total_value FROM stock WHERE status='active'");
-    while ($row = $res->fetch_assoc()) {
-        $products[] = $row;
-    }
-    header('Content-Type: application/json');
-    echo json_encode($products);
-    exit;
+// Check database connection
+if ($conn->connect_error) {
+    die("Database connection failed: " . $conn->connect_error);
 }
 
-/* ------------------ BULK DELETE (Soft Delete) ------------------ */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_delete'])) {
-    if (!empty($_POST['selected']) && is_array($_POST['selected'])) {
-        $ids = array_map('intval', $_POST['selected']); // sanitize ints
-        $in = implode(',', $ids);
+// Test database query
+$test_query = $conn->query("SELECT 1");
+if (!$test_query) {
+    die("Database test query failed: " . $conn->error);
+}
 
-        if ($in !== '') {
-            // Mark as inactive instead of deleting
-            $sql = "UPDATE stock SET status='inactive' WHERE id IN ($in)";
-            if ($conn->query($sql)) {
-                $_SESSION['flash'] = ['message' => count($ids) . " product(s) marked inactive successfully!", 'type' => 'success'];
-            } else {
-                $_SESSION['flash'] = ['message' => "Error updating status: " . $conn->error, 'type' => 'error'];
-            }
+// Debug function
+function debug_log($message) {
+    error_log("STOCK_DEBUG: " . $message);
+    file_put_contents('debug.log', date('Y-m-d H:i:s') . " - " . $message . "\n", FILE_APPEND);
+}
+
+// Log all POST requests for debugging
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    debug_log("POST Request: " . print_r($_POST, true));
+    if (!empty($_FILES)) {
+        debug_log("FILES Data: " . print_r($_FILES, true));
+    }
+}
+
+/* ------------------ BULK DELETE ------------------ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_delete'])) {
+    debug_log("Bulk delete triggered");
+    
+    if (!empty($_POST['selected']) && is_array($_POST['selected'])) {
+        $ids = array_map('intval', $_POST['selected']);
+        $in = implode(',', $ids);
+        
+        debug_log("Deleting IDs: " . $in);
+        
+        $sql = "UPDATE stock SET status='inactive' WHERE id IN ($in)";
+        if ($conn->query($sql)) {
+            $_SESSION['flash'] = ['message' => count($ids) . " product(s) deleted successfully!", 'type' => 'success'];
+            debug_log("Bulk delete successful");
         } else {
-            $_SESSION['flash'] = ['message' => "Invalid selection.", 'type' => 'error'];
+            $_SESSION['flash'] = ['message' => "Error deleting products: " . $conn->error, 'type' => 'error'];
+            debug_log("Bulk delete failed: " . $conn->error);
         }
     } else {
         $_SESSION['flash'] = ['message' => "Please select at least one product.", 'type' => 'error'];
+        debug_log("Bulk delete - no products selected");
     }
-
+    
     header("Location: stock.php");
     exit;
 }
 
 /* ------------------ UPDATE PRODUCT ------------------ */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
+    debug_log("Update product triggered");
+    
     $id = intval($_POST['edit_id'] ?? 0);
+    
     if ($id <= 0) {
-        $_SESSION['flash'] = ['message' => "Invalid product id.", 'type' => 'error'];
-        header("Location: stock.php"); exit;
+        $_SESSION['flash'] = ['message' => "Invalid product ID.", 'type' => 'error'];
+        header("Location: stock.php"); 
+        exit;
     }
 
+    // Get form data
     $category = trim($_POST['category'] ?? '');
-    $name     = trim($_POST['name'] ?? '');
-    $qty      = intval($_POST['qty'] ?? 0);
-    $price    = floatval($_POST['price'] ?? 0);
+    $name = trim($_POST['name'] ?? '');
+    $qty = intval($_POST['qty'] ?? 0);
+    $price = floatval($_POST['price'] ?? 0);
 
-    // Get current image path
-    $currentImg = '';
-    $sel = $conn->prepare("SELECT image_path FROM stock WHERE id = ?");
-    if ($sel) {
-        $sel->bind_param("i", $id);
-        $sel->execute();
-        $sel->bind_result($currentImg);
-        $sel->fetch();
-        $sel->close();
+    debug_log("Updating product ID: $id, Category: $category, Name: $name, Qty: $qty, Price: $price");
+
+    // Validate required fields
+    if (empty($category) || empty($name) || $price <= 0) {
+        $_SESSION['flash'] = ['message' => "Please fill all required fields with valid data.", 'type' => 'error'];
+        debug_log("Update validation failed");
+        header("Location: stock.php");
+        exit;
     }
 
-    // Handle image upload (optional)
-    $dbImagePath = $currentImg;
-    if (isset($_FILES['image']) && isset($_FILES['image']['tmp_name']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
-        $uploadsDir = __DIR__ . '/uploads/';
-        if (!is_dir($uploadsDir)) mkdir($uploadsDir, 0755, true);
+    // Handle image upload
+    $image_path = null;
+    if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+        debug_log("Image upload detected");
+        
+        $upload_dir = __DIR__ . '/uploads/';
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0755, true);
+        }
 
-        $originalName = basename($_FILES['image']['name']);
-        $ext = pathinfo($originalName, PATHINFO_EXTENSION);
-        $safeBase = time() . '_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', pathinfo($originalName, PATHINFO_FILENAME));
-        $fileName = $safeBase . ($ext ? '.' . $ext : '');
-        $targetFile = $uploadsDir . $fileName;
+        $file_name = time() . '_' . preg_replace('/[^a-zA-Z0-9\._-]/', '_', $_FILES['image']['name']);
+        $target_file = $upload_dir . $file_name;
 
-        if (move_uploaded_file($_FILES['image']['tmp_name'], $targetFile)) {
-            // delete old image if present
-            if (!empty($currentImg) && file_exists(__DIR__ . '/' . $currentImg)) {
-                @unlink(__DIR__ . '/' . $currentImg);
-            }
-            $dbImagePath = 'uploads/' . $fileName;
+        if (move_uploaded_file($_FILES['image']['tmp_name'], $target_file)) {
+            $image_path = 'uploads/' . $file_name;
+            debug_log("Image uploaded successfully: $image_path");
+        } else {
+            debug_log("Image upload failed");
         }
     }
 
-    // Update row with prepared statement
-    $stmt = $conn->prepare("UPDATE stock SET category = ?, name = ?, qty = ?, price = ?, image_path = ? WHERE id = ?");
-    if ($stmt) {
-        $stmt->bind_param("ssidsi", $category, $name, $qty, $price, $dbImagePath, $id);
-        if ($stmt->execute()) {
+    // Build update query
+    if ($image_path) {
+        $stmt = $conn->prepare("UPDATE stock SET category=?, name=?, qty=?, price=?, image_path=? WHERE id=?");
+        if ($stmt) {
+            $stmt->bind_param("ssidsi", $category, $name, $qty, $price, $image_path, $id);
+        }
+    } else {
+        $stmt = $conn->prepare("UPDATE stock SET category=?, name=?, qty=?, price=? WHERE id=?");
+        if ($stmt) {
+            $stmt->bind_param("ssidi", $category, $name, $qty, $price, $id);
+        }
+    }
+
+    if ($stmt && $stmt->execute()) {
+        if ($stmt->affected_rows > 0) {
             $_SESSION['flash'] = ['message' => "Product updated successfully!", 'type' => 'success'];
+            debug_log("Product update successful");
         } else {
-            $_SESSION['flash'] = ['message' => "Update error: " . $stmt->error, 'type' => 'error'];
+            $_SESSION['flash'] = ['message' => "No changes were made.", 'type' => 'warning'];
+            debug_log("Product update - no changes made");
         }
         $stmt->close();
     } else {
-        $_SESSION['flash'] = ['message' => "DB prepare failed: " . $conn->error, 'type' => 'error'];
+        $_SESSION['flash'] = ['message' => "Update failed: " . ($stmt ? $stmt->error : $conn->error), 'type' => 'error'];
+        debug_log("Product update failed: " . ($stmt ? $stmt->error : $conn->error));
     }
 
     header("Location: stock.php");
@@ -110,166 +142,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_product'])) {
 
 /* ------------------ ADD PRODUCT ------------------ */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_product'])) {
+    debug_log("Add product triggered");
+    
     $category = trim($_POST['category'] ?? '');
-    $name     = trim($_POST['name'] ?? '');
-    $qty      = intval($_POST['qty'] ?? 0);
-    $price    = floatval($_POST['price'] ?? 0);
-    $dbPath   = '';
+    $name = trim($_POST['name'] ?? '');
+    $qty = intval($_POST['qty'] ?? 0);
+    $price = floatval($_POST['price'] ?? 0);
 
-    if (isset($_FILES['image']) && isset($_FILES['image']['tmp_name']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
-        $uploadsDir = __DIR__ . '/uploads/';
-        if (!is_dir($uploadsDir)) mkdir($uploadsDir, 0755, true);
+    debug_log("Adding product - Category: $category, Name: $name, Qty: $qty, Price: $price");
 
-        $originalName = basename($_FILES['image']['name']);
-        $ext = pathinfo($originalName, PATHINFO_EXTENSION);
-        $safeBase = time() . '_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', pathinfo($originalName, PATHINFO_FILENAME));
-        $fileName = $safeBase . ($ext ? '.' . $ext : '');
-        $targetFile = $uploadsDir . $fileName;
+    // Validate required fields
+    if (empty($category) || empty($name) || $price <= 0) {
+        $_SESSION['flash'] = ['message' => "Please fill all required fields with valid data.", 'type' => 'error'];
+        debug_log("Add product validation failed");
+        header("Location: stock.php");
+        exit;
+    }
 
-        if (move_uploaded_file($_FILES['image']['tmp_name'], $targetFile)) {
-            $dbPath = 'uploads/' . $fileName;
+    // Handle image upload
+    $image_path = '';
+    if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+        debug_log("Image upload for new product");
+        
+        $upload_dir = __DIR__ . '/uploads/';
+        if (!is_dir($upload_dir)) {
+            mkdir($upload_dir, 0755, true);
+        }
+
+        $file_name = time() . '_' . preg_replace('/[^a-zA-Z0-9\._-]/', '_', $_FILES['image']['name']);
+        $target_file = $upload_dir . $file_name;
+
+        if (move_uploaded_file($_FILES['image']['tmp_name'], $target_file)) {
+            $image_path = 'uploads/' . $file_name;
+            debug_log("New product image uploaded: $image_path");
         }
     }
 
+    // Insert new product
     $stmt = $conn->prepare("INSERT INTO stock (category, name, qty, price, image_path) VALUES (?, ?, ?, ?, ?)");
     if ($stmt) {
-        $stmt->bind_param("ssids", $category, $name, $qty, $price, $dbPath);
-        $stmt->execute();
+        $stmt->bind_param("ssids", $category, $name, $qty, $price, $image_path);
+        if ($stmt->execute()) {
+            $_SESSION['flash'] = ['message' => "Product added successfully!", 'type' => 'success'];
+            debug_log("Product added successfully");
+        } else {
+            $_SESSION['flash'] = ['message' => "Error adding product: " . $stmt->error, 'type' => 'error'];
+            debug_log("Product add failed: " . $stmt->error);
+        }
         $stmt->close();
-        $_SESSION['flash'] = ['message' => "Product added successfully!", 'type' => 'success'];
     } else {
-        $_SESSION['flash'] = ['message' => "DB prepare failed: " . $conn->error, 'type' => 'error'];
-        header("Location: stock.php"); exit;
+        $_SESSION['flash'] = ['message' => "Database error: " . $conn->error, 'type' => 'error'];
+        debug_log("Prepare failed: " . $conn->error);
     }
 
     header("Location: stock.php");
     exit;
 }
 
-/* ------------------ IMPORT CSV (robust) ------------------ */
-if (isset($_POST['import_csv'])) {
-    if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
-        $err = $_FILES['csv_file']['error'] ?? 'no_file';
-        $_SESSION['flash'] = ['message' => "CSV upload failed (error code: {$err}).", 'type' => 'error'];
-        header("Location: stock.php"); exit;
-    }
-
-    $tmp = $_FILES['csv_file']['tmp_name'];
-    $contents = file_get_contents($tmp);
-    if ($contents === false || trim($contents) === '') {
-        $_SESSION['flash'] = ['message' => "CSV file appears empty.", 'type' => 'error'];
-        header("Location: stock.php"); exit;
-    }
-
-    // remove BOM
-    $contents = preg_replace('/^\x{FEFF}/u', '', $contents);
-
-    $firstLine = strtok($contents, "\n");
-    $delim = ',';
-    if (substr_count($firstLine, ';') > substr_count($firstLine, ',')) $delim = ';';
-    if (substr_count($firstLine, "\t") > substr_count($firstLine, ',')) $delim = "\t";
-
-    $fh = fopen('php://memory', 'r+');
-    fwrite($fh, $contents);
-    rewind($fh);
-
-    $header = fgetcsv($fh, 0, $delim);
-    if ($header === false) {
-        $_SESSION['flash'] = ['message' => "CSV header could not be parsed.", 'type' => 'error'];
-        fclose($fh);
-        header("Location: stock.php"); exit;
-    }
-
-    $map = [];
-    foreach ($header as $k => $v) {
-        $h = strtolower(trim($v));
-        $h = preg_replace('/^\x{FEFF}/u', '', $h);
-        $h = preg_replace('/[^\p{L}\p{N}\s_]/u', '', $h);
-        $h = str_replace([' ', '-', '/'], '_', $h);
-        if ($h === 'category') $map['category'] = $k;
-        if (in_array($h, ['name','product','product_name'])) $map['name'] = $k;
-        if (in_array($h, ['price','price_per_unit','priceperunit'])) $map['price'] = $k;
-        if (in_array($h, ['qty','quantity','stock'])) $map['qty'] = $k;
-        if (in_array($h, ['image','image_path','imagepath'])) $map['image'] = $k;
-    }
-
-    if (!isset($map['category']) || !isset($map['name']) || !isset($map['price'])) {
-        $_SESSION['flash'] = ['message' => "CSV header must contain Category, Name/Product and Price. Found: " . implode(', ', $header), 'type' => 'error'];
-        fclose($fh);
-        header("Location: stock.php"); exit;
-    }
-
-    $stmt = $conn->prepare("INSERT INTO stock (category, name, qty, price, image_path) VALUES (?, ?, ?, ?, ?)");
-    if (!$stmt) {
-        $_SESSION['flash'] = ['message' => "DB prepare failed: " . $conn->error, 'type' => 'error'];
-        fclose($fh);
-        header("Location: stock.php"); exit;
-    }
-
-    $inserted = 0;
-    while (($row = fgetcsv($fh, 0, $delim)) !== false) {
-        $allEmpty = true;
-        foreach ($row as $c) { if (trim($c) !== '') { $allEmpty = false; break; } }
-        if ($allEmpty) continue;
-
-        $category = trim($row[$map['category']] ?? '');
-        $name     = trim($row[$map['name']] ?? '');
-        $priceRaw = $row[$map['price']] ?? '0';
-        $price = floatval(preg_replace('/[^\d\.\-]/', '', $priceRaw));
-        $qty  = isset($map['qty']) ? intval(preg_replace('/[^\d\-]/','', $row[$map['qty']] ?? '0')) : 0;
-        $image = isset($map['image']) ? trim($row[$map['image']] ?? '') : '';
-
-        if ($category === '' || $name === '' || $price <= 0) continue;
-
-        $stmt->bind_param("ssids", $category, $name, $qty, $price, $image);
-        if ($stmt->execute()) $inserted++;
-    }
-    $stmt->close();
-    fclose($fh);
-
-    $_SESSION['flash'] = ['message' => "CSV import finished. Rows inserted: {$inserted}", 'type' => 'success'];
-    header("Location: stock.php");
-    exit;
-}
-
-/* ------------------ EXPORT CSV ------------------ */
-if (isset($_POST['export_csv'])) {
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename=stock_export.csv');
-    $output = fopen("php://output", "w");
-    fputcsv($output, ['ID', 'Category', 'Name', 'Qty', 'Price', 'Image Path', 'Created At']);
-
-    $result = $conn->query("SELECT id, category, name, qty, price, image_path, created_at FROM stock ORDER BY id ASC");
-    while ($row = $result->fetch_assoc()) {
-        fputcsv($output, [
-            $row['id'], $row['category'], $row['name'], $row['qty'],
-            $row['price'], $row['image_path'], $row['created_at']
-        ]);
-    }
-    fclose($output);
-    exit;
-}
-
-/* ------------------ TEMPLATE ------------------ */
-if (isset($_POST['generate_template'])) {
-    header('Content-Type: text/csv; charset=utf-8');
-    header('Content-Disposition: attachment; filename=stock_template.csv');
-    $out = fopen('php://output', 'w');
-    fputcsv($out, ['Category','Product','Name','Price Per Unit','Quantity','Image']);
-    fputcsv($out, ['Drinkware','Mug','Regular','150','100','uploads/mug.jpg']);
-    fputcsv($out, ['Accessories & Small Items','Keychain','Keychain','50','100','uploads/keychain.jpg']);
-    fputcsv($out, ['Apparel','Shirt','Tshirt','200','100','uploads/tshirt.jpg']);
-    fclose($out);
-    exit;
-}
-
-// Get statistics for dashboard
+// Get statistics
 $totalProducts = $conn->query("SELECT COUNT(*) as cnt FROM stock WHERE status='active'")->fetch_assoc()['cnt'];
 $totalValue = $conn->query("SELECT SUM(price * qty) as total FROM stock WHERE status='active'")->fetch_assoc()['total'];
 $lowStockCount = $conn->query("SELECT COUNT(*) as cnt FROM stock WHERE status='active' AND qty < 20")->fetch_assoc()['cnt'];
 
-/* ------------------ READ ALL STOCK (for display) ------------------ */
+// Get all active products
 $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id ASC");
+
+debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -279,6 +217,7 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
   <title>Inventory Management - Marcomedia POS</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
+    /* Your existing CSS styles remain the same */
     :root {
       --primary: #4361ee;
       --primary-dark: #3a56d4;
@@ -336,7 +275,6 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
       min-height: 100vh;
     }
 
-    /* Sidebar Styles */
     .sidebar {
       width: var(--sidebar-width);
       background: var(--sidebar-bg);
@@ -404,7 +342,6 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
       margin-top: auto;
     }
 
-    /* Main Content */
     .main-content {
       flex: 1;
       margin-left: var(--sidebar-width);
@@ -412,7 +349,6 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
       transition: var(--transition);
     }
 
-    /* Header */
     .header {
       display: flex;
       justify-content: space-between;
@@ -458,7 +394,6 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
       color: white;
     }
 
-    /* Stats Cards */
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -538,7 +473,6 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
       font-size: 14px;
     }
 
-    /* Forms */
     .form-container {
       background: var(--card-bg);
       border-radius: var(--card-radius);
@@ -582,7 +516,6 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
       box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
     }
 
-    /* Buttons */
     .btn {
       padding: 12px 20px;
       border-radius: 8px;
@@ -631,7 +564,6 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
       background: #d61a6e;
     }
 
-    /* Table */
     .table-container {
       background: var(--card-bg);
       border-radius: var(--card-radius);
@@ -737,7 +669,6 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
       align-items: end;
     }
 
-    /* Flash Message */
     .flash-message {
       padding: 12px 20px;
       border-radius: 8px;
@@ -758,7 +689,12 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
       border-left: 4px solid #ef4444;
     }
 
-    /* CSV Tools */
+    .flash-warning {
+      background: rgba(245, 158, 11, 0.1);
+      color: #f59e0b;
+      border-left: 4px solid #f59e0b;
+    }
+
     .csv-tools {
       background: var(--card-bg);
       border-radius: var(--card-radius);
@@ -780,7 +716,6 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
       color: var(--text-muted);
     }
 
-    /* Footer */
     .footer {
       text-align: center;
       padding: 20px;
@@ -790,7 +725,6 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
       margin-top: 30px;
     }
 
-    /* Responsive */
     @media (max-width: 768px) {
       .sidebar {
         width: 70px;
@@ -822,7 +756,6 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
       }
     }
 
-    /* Animations */
     @keyframes slideIn {
       from {
         opacity: 0;
@@ -835,7 +768,17 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
     }
 
     .hidden {
-      display: none;
+      display: none !important;
+    }
+
+    .debug-info {
+      background: #f8f9fa;
+      border: 1px solid #dee2e6;
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 5px;
+      font-family: monospace;
+      font-size: 12px;
     }
   </style>
 </head>
@@ -903,17 +846,24 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
 
       <!-- Flash Message -->
       <?php if(!empty($_SESSION['flash'])): ?>
-        <div class="flash-message flash-<?php echo $_SESSION['flash']['type'] === 'error' ? 'error' : 'success'; ?>">
+        <div class="flash-message flash-<?= $_SESSION['flash']['type'] === 'error' ? 'error' : ($_SESSION['flash']['type'] === 'warning' ? 'warning' : 'success') ?>">
           <?= $_SESSION['flash']['message']; unset($_SESSION['flash']); ?>
         </div>
       <?php endif; ?>
+
+      <!-- Debug Info (remove in production) -->
+      <div class="debug-info">
+        <strong>Debug Info:</strong> 
+        Products in DB: <?= $resAll->num_rows ?>, 
+        DB Connected: <?= $conn->ping() ? 'Yes' : 'No' ?>
+      </div>
 
       <!-- Stats Cards -->
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-header">
             <div>
-              <div class="stat-value"><?php echo $totalProducts; ?></div>
+              <div class="stat-value"><?= $totalProducts ?></div>
               <div class="stat-label">Total Products</div>
             </div>
             <div class="stat-icon">
@@ -925,7 +875,7 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
         <div class="stat-card success">
           <div class="stat-header">
             <div>
-              <div class="stat-value">₱<?php echo number_format($totalValue, 2); ?></div>
+              <div class="stat-value">₱<?= number_format($totalValue, 2) ?></div>
               <div class="stat-label">Total Inventory Value</div>
             </div>
             <div class="stat-icon">
@@ -937,7 +887,7 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
         <div class="stat-card warning">
           <div class="stat-header">
             <div>
-              <div class="stat-value"><?php echo $lowStockCount; ?></div>
+              <div class="stat-value"><?= $lowStockCount ?></div>
               <div class="stat-label">Low Stock Items</div>
             </div>
             <div class="stat-icon">
@@ -950,22 +900,22 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
       <!-- Add Product Form -->
       <div class="form-container">
         <h3 style="margin-bottom: 20px; color: var(--text);">Add New Product</h3>
-        <form id="productForm" enctype="multipart/form-data" method="POST">
+        <form id="productForm" enctype="multipart/form-data" method="POST" onsubmit="return validateForm(this)">
           <div class="form-grid">
             <div class="form-group">
-              <label for="category">Category</label>
+              <label for="category">Category *</label>
               <input type="text" id="category" name="category" class="form-control" placeholder="Enter category" required>
             </div>
             <div class="form-group">
-              <label for="name">Product Name</label>
+              <label for="name">Product Name *</label>
               <input type="text" id="name" name="name" class="form-control" placeholder="Enter product name" required>
             </div>
             <div class="form-group">
               <label for="qty">Quantity</label>
-              <input type="number" id="qty" name="qty" class="form-control" placeholder="0" min="0" value="0" required>
+              <input type="number" id="qty" name="qty" class="form-control" placeholder="0" min="0" value="0">
             </div>
             <div class="form-group">
-              <label for="price">Price</label>
+              <label for="price">Price *</label>
               <input type="number" step="0.01" id="price" name="price" class="form-control" placeholder="0.00" required>
             </div>
             <div class="form-group">
@@ -979,28 +929,6 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
             </div>
           </div>
         </form>
-      </div>
-
-      <!-- CSV Tools -->
-      <div class="csv-tools">
-        <h3 style="margin-bottom: 16px; color: var(--text);">Bulk Operations</h3>
-        <form action="stock.php" method="POST" enctype="multipart/form-data">
-          <div class="csv-actions">
-            <input type="file" name="csv_file" accept=".csv" class="form-control" style="flex: 1;">
-            <button type="submit" name="import_csv" class="btn btn-primary">
-              <i class="fas fa-file-import"></i> Import CSV
-            </button>
-            <button type="submit" name="export_csv" class="btn btn-success">
-              <i class="fas fa-file-export"></i> Export CSV
-            </button>
-            <button type="submit" name="generate_template" class="btn btn-warning">
-              <i class="fas fa-file-download"></i> Download Template
-            </button>
-          </div>
-        </form>
-        <div class="csv-note">
-          CSV Format: <strong>Category, Name, Price, Quantity (optional), Image Path (optional)</strong>
-        </div>
       </div>
 
       <!-- Products Table -->
@@ -1034,90 +962,94 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
             </tr>
           </thead>
           <tbody>
-            <?php
-            $counter = 1;
-            if ($resAll && $resAll->num_rows > 0):
-                while ($row = $resAll->fetch_assoc()):
-                    $lowStock = ($row['qty'] < 20);
-                    $totalValue = $row['price'] * $row['qty'];
-            ?>
-            <tr class="<?= $lowStock ? 'low-stock' : '' ?>">
-              <td class="checkbox-cell">
-                <input type="checkbox" name="selected[]" value="<?= $row['id'] ?>" form="bulkDeleteForm">
-              </td>
-              <td><?= $counter++ ?></td>
-              <td><?= htmlspecialchars($row['category']) ?></td>
-              <td>
-                <?php if (!empty($row['image_path'])): ?>
-                  <img src="<?= htmlspecialchars($row['image_path']) ?>" class="product-image" alt="<?= htmlspecialchars($row['name']) ?>">
-                <?php else: ?>
-                  <div style="width:50px;height:50px;background:var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);">
-                    <i class="fas fa-image"></i>
-                  </div>
-                <?php endif; ?>
-              </td>
-              <td>
-                <?= htmlspecialchars($row['name']) ?>
-                <?php if ($lowStock): ?>
-                  <span class="low-stock-badge">LOW STOCK</span>
-                <?php endif; ?>
-              </td>
-              <td>₱<?= number_format((float)$row['price'], 2) ?></td>
-              <td><?= intval($row['qty']) ?></td>
-              <td>₱<?= number_format($totalValue, 2) ?></td>
-              <td>
-                <button type="button" class="btn btn-primary" onclick="toggleEditRow(<?= $row['id'] ?>)">
-                  <i class="fas fa-edit"></i> Edit
-                </button>
-              </td>
-            </tr>
+            <?php if ($resAll && $resAll->num_rows > 0): ?>
+              <?php $counter = 1; ?>
+              <?php while ($row = $resAll->fetch_assoc()): ?>
+                <?php 
+                  $lowStock = ($row['qty'] < 20);
+                  $totalValue = $row['price'] * $row['qty'];
+                ?>
+                <tr class="<?= $lowStock ? 'low-stock' : '' ?>" id="row-<?= $row['id'] ?>">
+                  <td class="checkbox-cell">
+                    <input type="checkbox" name="selected[]" value="<?= $row['id'] ?>" form="bulkDeleteForm">
+                  </td>
+                  <td><?= $counter ?></td>
+                  <td><?= htmlspecialchars($row['category']) ?></td>
+                  <td>
+                    <?php if (!empty($row['image_path'])): ?>
+                      <img src="<?= htmlspecialchars($row['image_path']) ?>" class="product-image" alt="<?= htmlspecialchars($row['name']) ?>">
+                    <?php else: ?>
+                      <div style="width:50px;height:50px;background:var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);">
+                        <i class="fas fa-image"></i>
+                      </div>
+                    <?php endif; ?>
+                  </td>
+                  <td>
+                    <?= htmlspecialchars($row['name']) ?>
+                    <?php if ($lowStock): ?>
+                      <span class="low-stock-badge">LOW STOCK</span>
+                    <?php endif; ?>
+                  </td>
+                  <td>₱<?= number_format((float)$row['price'], 2) ?></td>
+                  <td><?= intval($row['qty']) ?></td>
+                  <td>₱<?= number_format($totalValue, 2) ?></td>
+                  <td>
+                    <button type="button" class="btn btn-primary" onclick="toggleEditRow(<?= $row['id'] ?>)">
+                      <i class="fas fa-edit"></i> Edit
+                    </button>
+                  </td>
+                </tr>
 
-            <!-- Edit Row -->
-            <tr id="edit-row-<?= $row['id'] ?>" class="hidden edit-row">
-              <td colspan="9">
-                <form method="POST" enctype="multipart/form-data" action="stock.php" class="edit-form">
-                  <input type="hidden" name="edit_id" value="<?= $row['id'] ?>">
-                  <div class="form-group">
-                    <label>Category</label>
-                    <input type="text" name="category" value="<?= htmlspecialchars($row['category']) ?>" class="form-control" required>
-                  </div>
-                  <div class="form-group">
-                    <label>Product Name</label>
-                    <input type="text" name="name" value="<?= htmlspecialchars($row['name']) ?>" class="form-control" required>
-                  </div>
-                  <div class="form-group">
-                    <label>Quantity</label>
-                    <input type="number" name="qty" value="<?= intval($row['qty']) ?>" class="form-control" min="0" required>
-                  </div>
-                  <div class="form-group">
-                    <label>Price</label>
-                    <input type="number" step="0.01" name="price" value="<?= htmlspecialchars($row['price']) ?>" class="form-control" required>
-                  </div>
-                  <div class="form-group">
-                    <label>Image</label>
-                    <input type="file" name="image" class="form-control" accept="image/*">
-                  </div>
-                  <div class="form-group">
-                    <button type="submit" name="update_product" class="btn btn-success">
-                      <i class="fas fa-save"></i> Save
-                    </button>
-                    <button type="button" class="btn btn-warning" onclick="toggleEditRow(<?= $row['id'] ?>)">
-                      <i class="fas fa-times"></i> Cancel
-                    </button>
-                  </div>
-                </form>
-              </td>
-            </tr>
-            <?php
-                endwhile;
-            else:
-            ?>
-            <tr>
-              <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 40px;">
-                <i class="fas fa-box-open" style="font-size: 48px; margin-bottom: 16px; display: block;"></i>
-                No products found in inventory
-              </td>
-            </tr>
+                <!-- Edit Row -->
+                <tr id="edit-row-<?= $row['id'] ?>" class="hidden edit-row">
+                  <td colspan="9">
+                    <form method="POST" enctype="multipart/form-data" action="stock.php" class="edit-form" onsubmit="return validateForm(this)">
+                      <input type="hidden" name="edit_id" value="<?= $row['id'] ?>">
+                      <div class="form-group">
+                        <label>Category *</label>
+                        <input type="text" name="category" value="<?= htmlspecialchars($row['category']) ?>" class="form-control" required>
+                      </div>
+                      <div class="form-group">
+                        <label>Product Name *</label>
+                        <input type="text" name="name" value="<?= htmlspecialchars($row['name']) ?>" class="form-control" required>
+                      </div>
+                      <div class="form-group">
+                        <label>Quantity</label>
+                        <input type="number" name="qty" value="<?= intval($row['qty']) ?>" class="form-control" min="0">
+                      </div>
+                      <div class="form-group">
+                        <label>Price *</label>
+                        <input type="number" step="0.01" name="price" value="<?= $row['price'] ?>" class="form-control" required>
+                      </div>
+                      <div class="form-group">
+                        <label>Image</label>
+                        <input type="file" name="image" class="form-control" accept="image/*">
+                        <?php if (!empty($row['image_path'])): ?>
+                          <small style="color: var(--text-muted); margin-top: 5px; display: block;">
+                            Current: <?= htmlspecialchars($row['image_path']) ?>
+                          </small>
+                        <?php endif; ?>
+                      </div>
+                      <div class="form-group">
+                        <button type="submit" name="update_product" class="btn btn-success">
+                          <i class="fas fa-save"></i> Save
+                        </button>
+                        <button type="button" class="btn btn-warning" onclick="toggleEditRow(<?= $row['id'] ?>)">
+                          <i class="fas fa-times"></i> Cancel
+                        </button>
+                      </div>
+                    </form>
+                  </td>
+                </tr>
+                <?php $counter++; ?>
+              <?php endwhile; ?>
+            <?php else: ?>
+              <tr>
+                <td colspan="9" style="text-align: center; color: var(--text-muted); padding: 40px;">
+                  <i class="fas fa-box-open" style="font-size: 48px; margin-bottom: 16px; display: block;"></i>
+                  No products found in inventory
+                </td>
+              </tr>
             <?php endif; ?>
           </tbody>
         </table>
@@ -1125,16 +1057,15 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
 
       <!-- Footer -->
       <div class="footer">
-        <p>&copy; <?php echo date('Y'); ?> Marcomedia POS. All rights reserved.</p>
+        <p>&copy; <?= date('Y') ?> Marcomedia POS. All rights reserved.</p>
       </div>
     </div>
   </div>
 
- <script>
-    // Theme Toggle - Improved version
+  <script>
+    // Theme Toggle
     const themeToggle = document.getElementById('theme-toggle');
     
-    // Initialize theme from localStorage or system preference
     function initializeTheme() {
       const savedTheme = localStorage.getItem('theme');
       const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -1152,18 +1083,14 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
       }
     }
 
-    // Update theme icon based on current mode
     function updateThemeIcon(mode) {
-      const icon = themeToggle.querySelector('i');
-      if (mode === 'moon') {
-        icon.className = 'fas fa-moon';
-      } else {
-        icon.className = 'fas fa-sun';
+      const themeIcon = document.querySelector('.theme-toggle i');
+      if (themeIcon) {
+        themeIcon.className = mode === 'moon' ? 'fas fa-moon' : 'fas fa-sun';
       }
     }
 
-    // Theme toggle event
-    themeToggle.addEventListener('click', function() {
+    themeToggle.addEventListener('change', function() {
       if (document.body.classList.contains('dark-mode')) {
         document.body.classList.remove('dark-mode');
         document.body.classList.add('light-mode');
@@ -1177,10 +1104,7 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
       }
     });
 
-    // Initialize theme on page load
-    document.addEventListener('DOMContentLoaded', initializeTheme);
-
-    // Select/Deselect All Checkboxes
+    // Select All Checkboxes
     const selectAll = document.getElementById('selectAll');
     if (selectAll) {
       selectAll.addEventListener('change', function() {
@@ -1191,33 +1115,79 @@ $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id AS
 
     // Toggle Edit Row
     function toggleEditRow(id) {
-      const row = document.getElementById("edit-row-" + id);
-      if (row) {
-        row.classList.toggle("hidden");
+      console.log('Toggling edit row for ID:', id);
+      
+      const editRow = document.getElementById("edit-row-" + id);
+      if (!editRow) {
+        console.error('Edit row not found for ID:', id);
+        return;
+      }
+      
+      // Close all other edit rows
+      document.querySelectorAll('.edit-row').forEach(row => {
+        if (row.id !== "edit-row-" + id) {
+          row.classList.add("hidden");
+        }
+      });
+      
+      // Toggle current row
+      editRow.classList.toggle("hidden");
+      
+      // Scroll to edit form
+      if (!editRow.classList.contains("hidden")) {
+        setTimeout(() => {
+          editRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 100);
       }
     }
 
-    // Instant Search
-    document.getElementById("searchInput").addEventListener("keyup", function() {
-      const filter = this.value.toLowerCase();
-      document.querySelectorAll(".table tbody tr").forEach(row => {
-        // Skip hidden edit rows
-        if (row.classList.contains("edit-row")) return;
+    // Form Validation
+    function validateForm(form) {
+      const category = form.querySelector('input[name="category"]');
+      const name = form.querySelector('input[name="name"]');
+      const price = form.querySelector('input[name="price"]');
+      
+      if (category && category.value.trim() === '') {
+        alert('Category is required');
+        category.focus();
+        return false;
+      }
+      
+      if (name && name.value.trim() === '') {
+        alert('Product name is required');
+        name.focus();
+        return false;
+      }
+      
+      if (price && (parseFloat(price.value) <= 0 || isNaN(parseFloat(price.value)))) {
+        alert('Price must be a number greater than 0');
+        price.focus();
+        return false;
+      }
+      
+      return true;
+    }
 
-        const text = row.innerText.toLowerCase();
-        row.style.display = text.includes(filter) ? "" : "none";
+    // Search Functionality
+    const searchInput = document.getElementById("searchInput");
+    if (searchInput) {
+      searchInput.addEventListener("keyup", function() {
+        const filter = this.value.toLowerCase();
+        const rows = document.querySelectorAll(".table tbody tr");
+        
+        rows.forEach(row => {
+          if (row.classList.contains("edit-row")) return;
+          
+          const text = row.textContent.toLowerCase();
+          row.style.display = text.includes(filter) ? "" : "none";
+        });
       });
-    });
+    }
 
-    // Add loading state to forms
-    document.querySelectorAll('form').forEach(form => {
-      form.addEventListener('submit', function(e) {
-        const submitBtn = e.submitter;
-        if (submitBtn && submitBtn.type === 'submit') {
-          submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
-          submitBtn.disabled = true;
-        }
-      });
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function() {
+      initializeTheme();
+      console.log('Page loaded successfully');
     });
   </script>
 </body>
