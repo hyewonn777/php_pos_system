@@ -217,7 +217,6 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
   <title>Inventory Management - Marcomedia POS</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    /* Your existing CSS styles remain the same */
     :root {
       --primary: #4361ee;
       --primary-dark: #3a56d4;
@@ -570,6 +569,7 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
       padding: 24px;
       box-shadow: 0 4px 12px var(--shadow);
       margin-bottom: 30px;
+      overflow-x: auto;
     }
 
     .table-header {
@@ -602,15 +602,23 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
       color: var(--text-muted);
     }
 
+    /* Fixed Table Alignment */
     .table {
       width: 100%;
       border-collapse: collapse;
+      transition: var(--transition);
+      min-width: 1000px;
+      table-layout: fixed; /* Added for consistent column widths */
     }
 
     .table th, .table td {
       padding: 14px 16px;
       text-align: left;
       border-bottom: 1px solid var(--border);
+      transition: var(--transition);
+      vertical-align: top; /* Ensure consistent vertical alignment */
+      word-wrap: break-word;
+      overflow-wrap: break-word;
     }
 
     .table th {
@@ -618,10 +626,69 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
       font-weight: 500;
       font-size: 14px;
       background: rgba(0, 0, 0, 0.02);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 2px solid var(--border); /* Stronger border for header */
     }
 
     .dark-mode .table th {
       background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Define consistent column widths */
+    .table th:nth-child(1),
+    .table td:nth-child(1) {
+      width: 50px; /* Checkbox column */
+      text-align: center;
+    }
+
+    .table th:nth-child(2),
+    .table td:nth-child(2) {
+      width: 60px; /* # column */
+      text-align: center;
+    }
+
+    .table th:nth-child(3),
+    .table td:nth-child(3) {
+      width: 120px; /* Category column */
+    }
+
+    .table th:nth-child(4),
+    .table td:nth-child(4) {
+      width: 80px; /* Image column */
+      text-align: center;
+    }
+
+    .table th:nth-child(5),
+    .table td:nth-child(5) {
+      width: 200px; /* Product Name column */
+    }
+
+    .table th:nth-child(6),
+    .table td:nth-child(6) {
+      width: 100px; /* Price column */
+    }
+
+    .table th:nth-child(7),
+    .table td:nth-child(7) {
+      width: 100px; /* Quantity column */
+    }
+
+    .table th:nth-child(8),
+    .table td:nth-child(8) {
+      width: 120px; /* Total Value column */
+    }
+
+    .table th:nth-child(9),
+    .table td:nth-child(9) {
+      width: 150px; /* Actions column */
+    }
+
+    .checkbox-cell {
+      width: 50px;
+      text-align: center;
+      transition: var(--transition);
     }
 
     .table tr:hover {
@@ -630,11 +697,6 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
 
     .dark-mode .table tr:hover {
       background: rgba(255, 255, 255, 0.02);
-    }
-
-    .checkbox-cell {
-      width: 40px;
-      text-align: center;
     }
 
     .product-image {
@@ -753,6 +815,46 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
       }
       .search-box {
         width: 100%;
+      }
+      
+      /* Reset fixed widths on mobile for better responsiveness */
+      .table {
+        table-layout: auto;
+      }
+      
+      .table th:nth-child(1),
+      .table td:nth-child(1),
+      .table th:nth-child(2),
+      .table td:nth-child(2),
+      .table th:nth-child(3),
+      .table td:nth-child(3),
+      .table th:nth-child(4),
+      .table td:nth-child(4),
+      .table th:nth-child(5),
+      .table td:nth-child(5),
+      .table th:nth-child(6),
+      .table td:nth-child(6),
+      .table th:nth-child(7),
+      .table td:nth-child(7),
+      .table th:nth-child(8),
+      .table td:nth-child(8),
+      .table th:nth-child(9),
+      .table td:nth-child(9) {
+        width: auto;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .main-content {
+        padding: 15px;
+      }
+      
+      .table-container {
+        padding: 15px;
+      }
+      
+      .edit-form {
+        grid-template-columns: 1fr;
       }
     }
 
