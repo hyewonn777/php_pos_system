@@ -2,30 +2,112 @@
 session_start();
 require 'db.php';
 
+// Check for order success message from checkout
+if (isset($_SESSION['order_success'])) {
+    setFlash($_SESSION['order_success'], 'success');
+    unset($_SESSION['order_success']);
+}
+
 /* ---------------- FLASH MESSAGE HELPER ---------------- */
 function setFlash($msg, $type = 'success') {
     $_SESSION['flash'] = ['message' => $msg, 'type' => $type];
+}
+
+/* ---------------- GET CUSTOMER FULLNAME ---------------- */
+function getCustomerFullname($conn, $customer_name) {
+    // Check if it's an email (website order)
+    if (filter_var($customer_name, FILTER_VALIDATE_EMAIL)) {
+        $stmt = $conn->prepare("SELECT fullname FROM users WHERE email = ?");
+        if ($stmt === false) {
+            error_log("Prepare failed: " . $conn->error);
+            return $customer_name;
+        }
+        $stmt->bind_param("s", $customer_name);
+        $stmt->execute();
+        $stmt->bind_result($fullname);
+        if ($stmt->fetch()) {
+            $stmt->close();
+            return $fullname . " (" . $customer_name . ")";
+        }
+        $stmt->close();
+    }
+    return $customer_name;
 }
 
 /* ---------------- CONFIRM ORDER ---------------- */
 if (isset($_POST['action']) && $_POST['action'] == 'confirm_order' && isset($_POST['order_id'])) {
     $order_id = intval($_POST['order_id']);
     
-    error_log("Confirm order called for ID: " . $order_id); // Debug
+    error_log("Confirm order called for ID: " . $order_id);
     
     $conn->begin_transaction();
     try {
+        // First, get order details to check if it's from website or physical
+        $stmt = $conn->prepare("SELECT order_number, customer_name, order_type FROM orders WHERE id = ?");
+        if ($stmt === false) {
+            throw new Exception("Prepare failed: " . $conn->error);
+        }
+        $stmt->bind_param("i", $order_id);
+        $stmt->execute();
+        $stmt->bind_result($order_number, $customer_name, $order_type);
+        $stmt->fetch();
+        $stmt->close();
+
         // Update order status to Confirmed
         $stmt = $conn->prepare("UPDATE orders SET status='Confirmed' WHERE id=?");
+        if ($stmt === false) {
+            throw new Exception("Prepare failed: " . $conn->error);
+        }
         $stmt->bind_param("i", $order_id);
         $stmt->execute();
         $stmt->close();
 
+        // If it's a website order and confirmed, push to sales tracking
+        if ($order_type == 'website' || $order_type == 'online') {
+            // Get order items
+            $items_stmt = $conn->prepare("SELECT product_id, quantity FROM order_items WHERE order_id = ?");
+            if ($items_stmt === false) {
+                throw new Exception("Prepare failed: " . $conn->error);
+            }
+            $items_stmt->bind_param("i", $order_id);
+            $items_stmt->execute();
+            $items_result = $items_stmt->get_result();
+            
+            while ($item = $items_result->fetch_assoc()) {
+                // Get product details
+                $product_stmt = $conn->prepare("SELECT name, price FROM stock WHERE id = ?");
+                if ($product_stmt === false) {
+                    throw new Exception("Prepare failed: " . $conn->error);
+                }
+                $product_stmt->bind_param("i", $item['product_id']);
+                $product_stmt->execute();
+                $product_stmt->bind_result($product_name, $price);
+                $product_stmt->fetch();
+                $product_stmt->close();
+                
+                $subtotal = $price * $item['quantity'];
+                
+                // Insert into sales table
+                $sales_stmt = $conn->prepare("INSERT INTO sales (sale_date, product, quantity, total, order_type, order_number) VALUES (NOW(), ?, ?, ?, ?, ?)");
+                if ($sales_stmt === false) {
+                    throw new Exception("Prepare failed: " . $conn->error);
+                }
+                $sales_stmt->bind_param("sidds", $product_name, $item['quantity'], $subtotal, $order_type, $order_number);
+                $sales_stmt->execute();
+                $sales_stmt->close();
+            }
+            $items_stmt->close();
+            
+            setFlash("Order #$order_id confirmed and pushed to sales tracking!");
+        } else {
+            setFlash("Order #$order_id confirmed successfully!");
+        }
+
         $conn->commit();
-        setFlash("Order #$order_id confirmed successfully!");
     } catch (Exception $e) {
         $conn->rollback();
         setFlash("Error confirming order: " . $e->getMessage(), 'error');
+        error_log("Confirm order error: " . $e->getMessage());
     }
 
     header("Location: orders.php");
@@ -36,12 +118,26 @@ if (isset($_POST['action']) && $_POST['action'] == 'confirm_order' && isset($_PO
 if (isset($_POST['action']) && $_POST['action'] == 'receive_order' && isset($_POST['order_id'])) {
     $order_id = intval($_POST['order_id']);
 
-    error_log("Receive order called for ID: " . $order_id); // Debug
+    error_log("Receive order called for ID: " . $order_id);
 
     $conn->begin_transaction();
     try {
+        // Get order details first
+        $order_stmt = $conn->prepare("SELECT order_number, order_type FROM orders WHERE id = ?");
+        if ($order_stmt === false) {
+            throw new Exception("Prepare failed: " . $conn->error);
+        }
+        $order_stmt->bind_param("i", $order_id);
+        $order_stmt->execute();
+        $order_stmt->bind_result($order_number, $order_type);
+        $order_stmt->fetch();
+        $order_stmt->close();
+
         // Fetch order items
         $stmt = $conn->prepare("SELECT product_id, quantity FROM order_items WHERE order_id=?");
+        if ($stmt === false) {
+            throw new Exception("Prepare failed: " . $conn->error);
+        }
         $stmt->bind_param("i", $order_id);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -54,12 +150,18 @@ if (isset($_POST['action']) && $_POST['action'] == 'receive_order' && isset($_PO
 
             // Deduct stock safely
             $stmt = $conn->prepare("UPDATE stock SET qty = GREATEST(qty - ?, 0) WHERE id=?");
+            if ($stmt === false) {
+                throw new Exception("Prepare failed: " . $conn->error);
+            }
             $stmt->bind_param("ii", $qty, $product_id);
             $stmt->execute();
             $stmt->close();
 
-            // Insert sale record
+            // Get product details for sales record
             $stmt = $conn->prepare("SELECT name, price FROM stock WHERE id=?");
+            if ($stmt === false) {
+                throw new Exception("Prepare failed: " . $conn->error);
+            }
             $stmt->bind_param("i", $product_id);
             $stmt->execute();
             $stmt->bind_result($product_name, $price);
@@ -67,23 +169,41 @@ if (isset($_POST['action']) && $_POST['action'] == 'receive_order' && isset($_PO
             $stmt->close();
 
             $total = $price * $qty;
-            $stmt = $conn->prepare("INSERT INTO sales (product, quantity, total, sale_date, status) VALUES (?, ?, ?, NOW(), 'paid')");
-            $stmt->bind_param("sid", $product_name, $qty, $total);
+            
+            // Insert sale record with order information
+            $check_column = $conn->query("SHOW COLUMNS FROM sales LIKE 'order_number'");
+            if ($check_column->num_rows > 0) {
+                $stmt = $conn->prepare("INSERT INTO sales (sale_date, product, quantity, total, order_type, order_number, status) VALUES (NOW(), ?, ?, ?, ?, ?, 'received')");
+                if ($stmt === false) {
+                    throw new Exception("Prepare failed: " . $conn->error);
+                }
+                $stmt->bind_param("sidds", $product_name, $qty, $total, $order_type, $order_number);
+            } else {
+                $stmt = $conn->prepare("INSERT INTO sales (sale_date, product, quantity, total, order_type, status) VALUES (NOW(), ?, ?, ?, ?, 'received')");
+                if ($stmt === false) {
+                    throw new Exception("Prepare failed: " . $conn->error);
+                }
+                $stmt->bind_param("sidd", $product_name, $qty, $total, $order_type);
+            }
             $stmt->execute();
             $stmt->close();
         }
 
         // Update order status to Received
         $stmt = $conn->prepare("UPDATE orders SET status='Received' WHERE id=?");
+        if ($stmt === false) {
+            throw new Exception("Prepare failed: " . $conn->error);
+        }
         $stmt->bind_param("i", $order_id);
         $stmt->execute();
         $stmt->close();
 
         $conn->commit();
-        setFlash("Order #$order_id marked as received!");
+        setFlash("Order #$order_id marked as received and inventory updated!");
     } catch (Exception $e) {
         $conn->rollback();
         setFlash("Error receiving order: " . $e->getMessage(), 'error');
+        error_log("Receive order error: " . $e->getMessage());
     }
 
     header("Location: orders.php");
@@ -100,12 +220,18 @@ if (isset($_POST['delete_orders']) && !empty($_POST['order_ids'])) {
     try {
         // Delete order items first
         $delItems = $conn->prepare("DELETE FROM order_items WHERE order_id IN ($placeholders)");
+        if ($delItems === false) {
+            throw new Exception("Prepare failed: " . $conn->error);
+        }
         $delItems->bind_param($types, ...$order_ids);
         $delItems->execute();
         $delItems->close();
 
         // Delete orders
         $delOrders = $conn->prepare("DELETE FROM orders WHERE id IN ($placeholders)");
+        if ($delOrders === false) {
+            throw new Exception("Prepare failed: " . $conn->error);
+        }
         $delOrders->bind_param($types, ...$order_ids);
         $delOrders->execute();
         $delOrders->close();
@@ -115,27 +241,68 @@ if (isset($_POST['delete_orders']) && !empty($_POST['order_ids'])) {
     } catch (Exception $e) {
         $conn->rollback();
         setFlash("Error deleting orders: " . $e->getMessage(), 'error');
+        error_log("Delete orders error: " . $e->getMessage());
     }
 
     header("Location: orders.php");
     exit;
 }
 
-// Get order statistics
-$pendingCount = $conn->query("SELECT COUNT(*) as cnt FROM orders WHERE status='Pending'")->fetch_assoc()['cnt'];
-$confirmedCount = $conn->query("SELECT COUNT(*) as cnt FROM orders WHERE status='Confirmed'")->fetch_assoc()['cnt'];
-$receivedCount = $conn->query("SELECT COUNT(*) as cnt FROM orders WHERE status='Received'")->fetch_assoc()['cnt'];
-$cancelledCount = $conn->query("SELECT COUNT(*) as cnt FROM orders WHERE status='Cancelled'")->fetch_assoc()['cnt'];
+// Get order statistics with error handling
+$pendingCount = 0;
+$confirmedCount = 0;
+$receivedCount = 0;
+$cancelledCount = 0;
 
-// Get all orders for display
-$orders = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
+$pendingResult = $conn->query("SELECT COUNT(*) as cnt FROM orders WHERE status='Pending'");
+if ($pendingResult && $pendingResult->num_rows > 0) {
+    $pendingCount = $pendingResult->fetch_assoc()['cnt'];
+}
+
+$confirmedResult = $conn->query("SELECT COUNT(*) as cnt FROM orders WHERE status='Confirmed'");
+if ($confirmedResult && $confirmedResult->num_rows > 0) {
+    $confirmedCount = $confirmedResult->fetch_assoc()['cnt'];
+}
+
+$receivedResult = $conn->query("SELECT COUNT(*) as cnt FROM orders WHERE status='Received'");
+if ($receivedResult && $receivedResult->num_rows > 0) {
+    $receivedCount = $receivedResult->fetch_assoc()['cnt'];
+}
+
+$cancelledResult = $conn->query("SELECT COUNT(*) as cnt FROM orders WHERE status='Cancelled'");
+if ($cancelledResult && $cancelledResult->num_rows > 0) {
+    $cancelledCount = $cancelledResult->fetch_assoc()['cnt'];
+}
+
+// Get all orders for display - SIMPLIFIED QUERY THAT WORKS
+$orders = [];
+$orders_query = $conn->query("
+    SELECT o.*, 
+           COALESCE(u.fullname, o.customer_name) as display_name,
+           COALESCE(u.email, o.customer_name) as customer_email
+    FROM orders o 
+    LEFT JOIN users u ON o.user_id = u.id 
+    ORDER BY o.created_at DESC
+");
+
+if ($orders_query === false) {
+    error_log("Orders query failed: " . $conn->error);
+    // Try simpler query without join
+    $orders_query = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
+}
+
+if ($orders_query && $orders_query->num_rows > 0) {
+    $orders = $orders_query->fetch_all(MYSQLI_ASSOC);
+} else {
+    error_log("No orders found or query failed");
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Order Tracking - Marcomedia POS</title>
+  <title>Purchase Orders - Marcomedia POS</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     :root {
@@ -445,6 +612,7 @@ $orders = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
       box-shadow: 0 4px 12px var(--shadow);
       margin-bottom: 30px;
       transition: var(--transition);
+      overflow-x: auto;
     }
 
     .table-actions {
@@ -552,6 +720,7 @@ $orders = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
       width: 100%;
       border-collapse: collapse;
       transition: var(--transition);
+      min-width: 1000px;
     }
 
     .orders-table th, .orders-table td {
@@ -579,7 +748,6 @@ $orders = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
 
     .orders-table tr:hover {
       background: rgba(0, 0, 0, 0.02);
-      transform: scale(1.01);
     }
 
     .dark-mode .orders-table tr:hover {
@@ -598,6 +766,8 @@ $orders = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
       font-size: 12px;
       font-weight: 500;
       transition: var(--transition);
+      display: inline-block;
+      white-space: nowrap;
     }
 
     .status-pending {
@@ -620,21 +790,32 @@ $orders = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
       color: #ef4444;
     }
 
+    .status-completed {
+      background: rgba(16, 185, 129, 0.1);
+      color: #10b981;
+    }
+
     .action-cell {
       display: flex;
-      gap: 8px;
+      gap: 6px;
       transition: var(--transition);
+      flex-wrap: wrap;
+      min-width: 180px;
     }
 
     .action-btn {
-      padding: 6px 12px;
+      padding: 6px 10px;
       border-radius: 6px;
       border: none;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 500;
       cursor: pointer;
       transition: var(--transition);
       box-shadow: 0 2px 4px var(--shadow);
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 4px;
     }
 
     .action-btn:hover {
@@ -701,6 +882,20 @@ $orders = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
       border-left: 4px solid #ef4444;
     }
 
+    /* Section Header */
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
     /* Footer */
     .footer {
       text-align: center;
@@ -753,6 +948,14 @@ $orders = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
       .orders-table {
         display: block;
         overflow-x: auto;
+      }
+      .action-cell {
+        flex-direction: column;
+        gap: 4px;
+      }
+      .action-btn {
+        width: 100%;
+        justify-content: center;
       }
     }
 
@@ -831,6 +1034,26 @@ $orders = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
     #actionForm {
       display: none;
     }
+
+    .text-muted {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    .order-type-badge {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      background: rgba(67, 97, 238, 0.1);
+      color: var(--primary);
+    }
+
+    .customer-email {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: block;
+      margin-top: 2px;
+    }
   </style>
 </head>
 <body>
@@ -858,6 +1081,10 @@ $orders = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
           <i class="fas fa-boxes"></i>
           <span class="menu-text">Inventory</span>
         </a>
+        <a href="physical_orders.php" class="menu-item">
+          <i class="fas fa-store"></i>
+          <span class="menu-text">Physical Orders</span>
+        </a>
         <a href="appointment.php" class="menu-item">
           <i class="fas fa-calendar-alt"></i>
           <span class="menu-text">Appointments</span>
@@ -869,7 +1096,7 @@ $orders = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
       </div>
       <div class="sidebar-footer">
         <form action="logout.php" method="POST">
-          <button type="submit" style="background: var(--danger); color: white; border: none; padding: 10px; width: 100%; border-radius: 6px; cursor: pointer; transition: var(--transition);">
+          <button type="submit" style="background: var(--danger); color: white; border: none; padding: 10px; width: 100%; border-radius: 6px; cursor: pointer;">
             <i class="fas fa-sign-out-alt"></i> Logout
           </button>
         </form>
@@ -881,7 +1108,7 @@ $orders = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
       <!-- Header -->
       <div class="header">
         <div class="header-title">
-          <h1>Order Tracking</h1>
+          <h1>Purchase Orders</h1>
           <p>Track pending customer orders</p>
         </div>
         <div class="header-actions">
@@ -899,6 +1126,22 @@ $orders = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
       <?php if(!empty($_SESSION['flash'])): ?>
         <div class="flash-message flash-<?php echo $_SESSION['flash']['type'] === 'error' ? 'error' : 'success'; ?>">
           <?= $_SESSION['flash']['message']; unset($_SESSION['flash']); ?>
+        </div>
+      <?php endif; ?>
+
+      <!-- Debug Info (remove in production) -->
+      <?php if(empty($orders)): ?>
+        <div class="flash-message flash-error">
+          <strong>Debug Info:</strong> No orders found in database. 
+          <?php 
+          $test_query = $conn->query("SELECT COUNT(*) as total FROM orders");
+          if ($test_query) {
+              $count = $test_query->fetch_assoc()['total'];
+              echo "Total orders in database: " . $count;
+          } else {
+              echo "Cannot connect to orders table: " . $conn->error;
+          }
+          ?>
         </div>
       <?php endif; ?>
 
@@ -995,32 +1238,51 @@ $orders = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
               </tr>
             </thead>
             <tbody>
-              <?php if ($orders && $orders->num_rows > 0): ?>
-                <?php while ($order = $orders->fetch_assoc()): ?>
+              <?php if (!empty($orders)): ?>
+                <?php foreach ($orders as $order): ?>
                   <?php
                   $itemsList = [];
                   $total = 0;
 
+                  // Get order items with error handling
                   $itemsRes = $conn->prepare("SELECT oi.quantity, s.name, s.price 
                                               FROM order_items oi
                                               JOIN stock s ON s.id = oi.product_id
                                               WHERE oi.order_id = ?");
-                  $itemsRes->bind_param("i", $order['id']);
-                  $itemsRes->execute();
-                  $itemsRes->bind_result($qty, $name, $price);
-
-                  while ($itemsRes->fetch()) {
-                      $itemsList[] = "{$qty}x {$name}";
-                      $total += $qty * $price;
+                  if ($itemsRes) {
+                      $itemsRes->bind_param("i", $order['id']);
+                      if ($itemsRes->execute()) {
+                          $itemsRes->bind_result($qty, $name, $price);
+                          while ($itemsRes->fetch()) {
+                              $itemsList[] = "{$qty}x {$name}";
+                              $total += $qty * $price;
+                          }
+                      }
+                      $itemsRes->close();
                   }
-                  $itemsRes->close();
                   ?>
                   <tr class="order-row" data-status="<?= $order['status']; ?>">
                     <td class="checkbox-cell">
                       <input type="checkbox" name="order_ids[]" value="<?= $order['id']; ?>">
                     </td>
-                    <td>#<?= $order['id']; ?></td>
-                    <td><?= htmlspecialchars($order['customer_name']); ?></td>
+                    <td>
+                      #<?= $order['id']; ?>
+                      <?php if (!empty($order['order_number'])): ?>
+                        <br><small class="text-muted"><?= $order['order_number']; ?></small>
+                      <?php endif; ?>
+                    </td>
+                    <td>
+                      <?= htmlspecialchars($order['display_name']); ?>
+                      <?php if (!empty($order['customer_email'])): ?>
+                        <small class="customer-email"><?= htmlspecialchars($order['customer_email']); ?></small>
+                      <?php endif; ?>
+                      <br>
+                      <?php if ($order['order_type'] == 'physical'): ?>
+                        <small class="text-muted">Physical Order</small>
+                      <?php else: ?>
+                        <small class="text-muted">Website Order</small>
+                      <?php endif; ?>
+                    </td>
                     <td><?= !empty($itemsList) ? implode(", ", $itemsList) : "No items"; ?></td>
                     <td>₱<?= number_format($total, 2); ?></td>
                     <td>
@@ -1050,15 +1312,25 @@ $orders = $conn->query("SELECT * FROM orders ORDER BY created_at DESC");
                           <i class="fas fa-times-circle"></i> Cancelled
                         </span>
                         <?php if (!empty($order['cancellation_note'])): ?>
-                          <br><small><?= htmlspecialchars($order['cancellation_note']); ?></small>
+                          <br><small class="text-muted"><?= htmlspecialchars($order['cancellation_note']); ?></small>
                         <?php endif; ?>
+                      <?php elseif ($order['status'] === 'Completed'): ?>
+                        <span style="color: var(--success);">
+                          <i class="fas fa-check-circle"></i> Completed
+                        </span>
                       <?php endif; ?>
                     </td>
                   </tr>
-                <?php endwhile; ?>
+                <?php endforeach; ?>
               <?php else: ?>
                 <tr>
-                  <td colspan="8" style="text-align: center;">No orders found.</td>
+                  <td colspan="8" style="text-align: center; padding: 40px;">
+                    <i class="fas fa-inbox" style="font-size: 48px; color: var(--text-muted); margin-bottom: 15px; display: block;"></i>
+                    No orders found in the system.
+                    <?php if(isset($_SESSION['user_id'])): ?>
+                      <br><small class="text-muted">Orders created through checkout will appear here.</small>
+                    <?php endif; ?>
+                  </td>
                 </tr>
               <?php endif; ?>
             </tbody>
@@ -1245,7 +1517,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Order Action Functions
 function confirmOrder(orderId) {
-    if (confirm('Confirm order #' + orderId + '?')) {
+    if (confirm('Confirm order #' + orderId + '?\n\nThis will push website orders to sales tracking.')) {
         document.getElementById('formAction').value = 'confirm_order';
         document.getElementById('formOrderId').value = orderId;
         document.getElementById('actionForm').submit();
@@ -1253,7 +1525,7 @@ function confirmOrder(orderId) {
 }
 
 function receiveOrder(orderId) {
-    if (confirm('Mark order #' + orderId + ' as received?')) {
+    if (confirm('Mark order #' + orderId + ' as received?\n\nThis will update inventory and sales records.')) {
         document.getElementById('formAction').value = 'receive_order';
         document.getElementById('formOrderId').value = orderId;
         document.getElementById('actionForm').submit();

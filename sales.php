@@ -15,7 +15,7 @@ if (isset($_POST['add_sale'])) {
     $quantity  = intval($_POST['quantity']);
     $total     = floatval($_POST['total']);
 
-    $stmt = $conn->prepare("INSERT INTO sales (sale_date, product, quantity, total) VALUES (?, ?, ?, ?)");
+    $stmt = $conn->prepare("INSERT INTO sales (sale_date, product, quantity, total, order_type) VALUES (?, ?, ?, ?, 'online')");
     if ($stmt) {
         $stmt->bind_param("ssid", $sale_date, $product, $quantity, $total);
         $stmt->execute();
@@ -66,6 +66,7 @@ if (isset($_POST['update_selected']) && !empty($_POST['selected_sales'])) {
             }
         }
     }
+    setFlash("Selected sales updated successfully!");
     header("Location: sales.php");
     exit;
 }
@@ -98,19 +99,79 @@ if (isset($_POST['delete_selected']) && !empty($_POST['selected_sales'])) {
             }
         }
     }
+    setFlash("Selected sales deleted successfully!");
     header("Location: sales.php");
     exit;
 }
 
-/* -------------------- READ SALES -------------------- */
-$result = $conn->query("SELECT id, product, quantity, total, sale_date FROM sales ORDER BY sale_date DESC");
+/* -------------------- UPDATE INDIVIDUAL SALE -------------------- */
+if (isset($_POST['update_sale']) && isset($_POST['sale_id'])) {
+    $sale_id = intval($_POST['sale_id']);
+    $new_qty = intval($_POST['quantity'] ?? 0);
+    $new_total = floatval($_POST['total'] ?? 0);
+
+    $stmt = $conn->prepare("SELECT product, quantity FROM sales WHERE id=?");
+    if ($stmt) {
+        $stmt->bind_param("i", $sale_id);
+        $stmt->execute();
+        $stmt->bind_result($product, $old_qty);
+        $stmt->fetch();
+        $stmt->close();
+
+        $qty_diff = $new_qty - $old_qty;
+
+        $stmt = $conn->prepare("UPDATE stock SET qty = qty - ? WHERE name=?");
+        if ($stmt) {
+            $stmt->bind_param("is", $qty_diff, $product);
+            $stmt->execute();
+            $stmt->close();
+        }
+
+        $stmt = $conn->prepare("UPDATE sales SET quantity=?, total=? WHERE id=?");
+        if ($stmt) {
+            $stmt->bind_param("idi", $new_qty, $new_total, $sale_id);
+            $stmt->execute();
+            $stmt->close();
+        }
+    }
+    setFlash("Sale updated successfully!");
+    header("Location: sales.php");
+    exit;
+}
+
+/* -------------------- FLASH MESSAGE HELPER -------------------- */
+function setFlash($msg, $type = 'success') {
+    $_SESSION['flash'] = ['message' => $msg, 'type' => $type];
+}
+
+/* -------------------- READ SALES (INCLUDING PHYSICAL ORDERS) -------------------- */
+$result = $conn->query("
+    SELECT s.id, s.product, s.quantity, s.total, s.sale_date, s.order_type, 
+           s.customer_name, s.customer_phone, s.payment_method, s.order_id,
+           o.customer_name as order_customer_name,
+           u.fullname as user_fullname,
+           o.order_number
+    FROM sales s 
+    LEFT JOIN orders o ON s.order_id = o.id 
+    LEFT JOIN users u ON o.customer_name = u.email
+    ORDER BY s.sale_date DESC
+");
 $sales = [];
 $totalSales = 0;
+$onlineSales = 0;
+$physicalSales = 0;
 $skuMargins = [];
 
 while ($row = $result->fetch_assoc()) {
     $sales[] = $row;
     $totalSales += floatval($row['total']);
+    
+    // Track sales by type
+    if ($row['order_type'] === 'physical') {
+        $physicalSales += floatval($row['total']);
+    } else {
+        $onlineSales += floatval($row['total']);
+    }
 
     $sku = $row['product'];
     $profit = $row['total'] * 0.1; // 10% profit assumed
@@ -141,35 +202,114 @@ foreach ($skuMargins as $sku => &$data) {
 unset($data);
 
 /* -------------------- SUMMARY CALCULATIONS -------------------- */
-$grossSales = $totalSales;                 // sum of all sales totals
-$globalDiscountPercent = 10;               // 10% discount for net sales (assume rani ahak)
+$grossSales = $totalSales;
+$globalDiscountPercent = 10;
 $discountAmount = $grossSales * $globalDiscountPercent / 100;
 $netSales = $grossSales - $discountAmount;
 
 $totalProfitAfterDiscount = array_sum(array_column($skuMargins,'profit_after_discount'));
 
-// Get sales data for charts
+/* -------------------- CHART DATA WITH FILTERS -------------------- */
+// Get filter parameters
+$chartFilter = $_GET['chart_filter'] ?? 'month';
+$orderTypeFilter = $_GET['order_type'] ?? 'all'; // all, online, physical
+$startDate = $_GET['start_date'] ?? '';
+$endDate = $_GET['end_date'] ?? '';
+
+// Build query based on filter
 $monthlySales = [];
-$result = $conn->query("
-    SELECT MONTH(sale_date) as month, SUM(total) as total 
-    FROM sales 
-    WHERE YEAR(sale_date) = YEAR(CURDATE()) 
-    GROUP BY MONTH(sale_date) 
-    ORDER BY month
-");
+$chartLabels = [];
+$chartQuery = "";
+
+switch($chartFilter) {
+    case 'day':
+        $chartQuery = "
+            SELECT DATE(sale_date) as period, SUM(total) as total 
+            FROM sales 
+            WHERE 1=1
+        ";
+        break;
+        
+    case 'week':
+        $chartQuery = "
+            SELECT YEAR(sale_date) as year, WEEK(sale_date) as week, SUM(total) as total 
+            FROM sales 
+            WHERE 1=1
+        ";
+        break;
+        
+    case 'month':
+    default:
+        $chartQuery = "
+            SELECT YEAR(sale_date) as year, MONTH(sale_date) as month, SUM(total) as total 
+            FROM sales 
+            WHERE 1=1
+        ";
+        break;
+        
+    case 'year':
+        $chartQuery = "
+            SELECT YEAR(sale_date) as year, SUM(total) as total 
+            FROM sales 
+            WHERE 1=1
+        ";
+        break;
+}
+
+// Add order type filter
+if ($orderTypeFilter !== 'all') {
+    $chartQuery .= " AND order_type = '$orderTypeFilter'";
+}
+
+// Add date range filter
+if ($startDate) $chartQuery .= " AND sale_date >= '$startDate'";
+if ($endDate) $chartQuery .= " AND sale_date <= '$startDate 23:59:59'";
+
+// Complete query based on filter type
+switch($chartFilter) {
+    case 'day':
+        $chartQuery .= " GROUP BY DATE(sale_date) ORDER BY period";
+        $labelFormat = 'M j';
+        break;
+    case 'week':
+        $chartQuery .= " GROUP BY YEAR(sale_date), WEEK(sale_date) ORDER BY year, week";
+        $labelFormat = 'Wk %d';
+        break;
+    case 'month':
+        $chartQuery .= " GROUP BY YEAR(sale_date), MONTH(sale_date) ORDER BY year, month";
+        $labelFormat = 'M';
+        break;
+    case 'year':
+        $chartQuery .= " GROUP BY YEAR(sale_date) ORDER BY year";
+        $labelFormat = 'Y';
+        break;
+}
+
+$result = $conn->query($chartQuery);
 if ($result && $result->num_rows > 0) {
     while($row = $result->fetch_assoc()) {
-        $monthlySales[$row['month']] = $row['total'];
+        if ($chartFilter == 'day') {
+            $monthlySales[$row['period']] = $row['total'];
+            $chartLabels[] = date($labelFormat, strtotime($row['period']));
+        } elseif ($chartFilter == 'week') {
+            $key = $row['year'] . '-' . $row['week'];
+            $monthlySales[$key] = $row['total'];
+            $chartLabels[] = sprintf($labelFormat, $row['week']);
+        } elseif ($chartFilter == 'month') {
+            $key = $row['year'] . '-' . $row['month'];
+            $monthlySales[$key] = $row['total'];
+            $chartLabels[] = date($labelFormat, mktime(0, 0, 0, $row['month'], 1));
+        } else { // year
+            $monthlySales[$row['year']] = $row['total'];
+            $chartLabels[] = $row['year'];
+        }
     }
 }
 
-// Fill in missing months with zero
-$monthlySalesData = [];
-for ($i = 1; $i <= 12; $i++) {
-    $monthlySalesData[] = isset($monthlySales[$i]) ? floatval($monthlySales[$i]) : 0;
-}
+// Fill in missing data points for better visualization
+$monthlySalesData = array_values($monthlySales);
 
-// Get top products
+// Get top products (including physical orders)
 $topProducts = [];
 $result = $conn->query("
     SELECT product, SUM(quantity) as total_qty, SUM(total) as total_sales 
@@ -183,8 +323,14 @@ if ($result && $result->num_rows > 0) {
         $topProducts[] = $row;
     }
 }
-?>
 
+// Get sales by type for stats
+$salesByType = [
+    'online' => $onlineSales,
+    'physical' => $physicalSales,
+    'total' => $totalSales
+];
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -192,6 +338,7 @@ if ($result && $result->num_rows > 0) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sales & Tracking - Marcomedia POS</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
       --primary: #4361ee;
@@ -248,7 +395,68 @@ if ($result && $result->num_rows > 0) {
       min-height: 100vh;
     }
 
-    /* Sidebar Styles */
+    /* Flash Message */
+    .flash-message {
+        padding: 12px 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        font-weight: 500;
+        animation: slideIn 0.5s ease-out;
+    }
+
+    @keyframes slideIn {
+        from { opacity: 0; transform: translateY(-20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .flash-success {
+        background: rgba(16, 185, 129, 0.1);
+        color: #10b981;
+        border-left: 4px solid #10b981;
+    }
+
+    .flash-error {
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+        border-left: 4px solid #ef4444;
+    }
+
+    /* Order Type Badge */
+    .order-type-badge {
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 500;
+    }
+
+    .order-type-online {
+        background: rgba(67, 97, 238, 0.1);
+        color: var(--primary);
+    }
+
+    .order-type-physical {
+        background: rgba(16, 185, 129, 0.1);
+        color: #10b981;
+    }
+
+    .payment-badge {
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        background: rgba(247, 37, 133, 0.1);
+        color: var(--warning);
+    }
+
+    .customer-name {
+        font-weight: 500;
+        color: var(--text);
+    }
+
+    .customer-email {
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+
     .sidebar {
       width: var(--sidebar-width);
       background: var(--sidebar-bg);
@@ -405,6 +613,10 @@ if ($result && $result->num_rows > 0) {
       border-left-color: var(--success);
     }
 
+    .stat-card.info {
+      border-left-color: var(--info);
+    }
+
     .stat-header {
       display: flex;
       justify-content: space-between;
@@ -437,6 +649,11 @@ if ($result && $result->num_rows > 0) {
     .stat-card.success .stat-icon {
       background: rgba(76, 201, 240, 0.1);
       color: var(--success);
+    }
+
+    .stat-card.info .stat-icon {
+      background: rgba(72, 149, 239, 0.1);
+      color: var(--info);
     }
 
     .stat-value {
@@ -507,6 +724,44 @@ if ($result && $result->num_rows > 0) {
       background: rgba(67, 97, 238, 0.05);
       border-radius: 8px;
       margin-top: 15px;
+      position: relative;
+    }
+
+    .chart-controls {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 15px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .filter-group {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .filter-select, .date-input {
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .filter-btn {
+      padding: 8px 16px;
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .filter-btn:hover {
+      background: var(--primary-dark);
     }
 
     .top-products table {
@@ -533,6 +788,7 @@ if ($result && $result->num_rows > 0) {
       padding: 24px;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
       margin-bottom: 30px;
+      overflow-x: auto;
     }
 
     .table-actions {
@@ -612,6 +868,7 @@ if ($result && $result->num_rows > 0) {
     .sales-table {
       width: 100%;
       border-collapse: collapse;
+      min-width: 1200px;
     }
 
     .sales-table th, .sales-table td {
@@ -639,14 +896,18 @@ if ($result && $result->num_rows > 0) {
       background: rgba(255, 255, 255, 0.02);
     }
 
-    .qty-input {
-      width: 70px;
+    .qty-input, .total-input {
+      width: 80px;
       padding: 8px;
       border-radius: 6px;
       border: 1px solid var(--border);
       background: var(--card-bg);
       color: var(--text);
       text-align: center;
+    }
+
+    .total-input {
+      width: 100px;
     }
 
     .level-badge {
@@ -674,6 +935,26 @@ if ($result && $result->num_rows > 0) {
     .checkbox-cell {
       width: 40px;
       text-align: center;
+    }
+
+    .edit-form {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .edit-btn {
+        padding: 6px 12px;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+    }
+
+    .edit-btn:hover {
+        background: var(--primary-dark);
     }
 
     /* Footer */
@@ -719,6 +1000,14 @@ if ($result && $result->num_rows > 0) {
       }
       .search-box {
         width: 100%;
+      }
+      .chart-controls {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .sales-table {
+        display: block;
+        overflow-x: auto;
       }
     }
 
@@ -769,6 +1058,7 @@ if ($result && $result->num_rows > 0) {
     }
   </style>
 </head>
+<body class="light-mode">
   <div class="container">
     <!-- Sidebar -->
     <div class="sidebar">
@@ -793,6 +1083,10 @@ if ($result && $result->num_rows > 0) {
           <i class="fas fa-boxes"></i>
           <span class="menu-text">Inventory</span>
         </a>
+        <a href="physical_orders.php" class="menu-item">
+          <i class="fas fa-store"></i>
+          <span class="menu-text">Physical Orders</span>
+        </a>
         <a href="appointment.php" class="menu-item">
           <i class="fas fa-calendar-alt"></i>
           <span class="menu-text">Appointments</span>
@@ -816,7 +1110,7 @@ if ($result && $result->num_rows > 0) {
       <!-- Header -->
       <div class="header">
         <div class="header-title">
-          <h1>Sales & Tracking</h1>
+          <h1>Sales  Tracking</h1>
           <p>Track revenue and sales performance</p>
         </div>
         <div class="header-actions">
@@ -829,6 +1123,13 @@ if ($result && $result->num_rows > 0) {
           </div>
         </div>
       </div>
+
+      <!-- Flash Message -->
+      <?php if(!empty($_SESSION['flash'])): ?>
+        <div class="flash-message flash-<?php echo $_SESSION['flash']['type'] === 'error' ? 'error' : 'success'; ?>">
+          <?= $_SESSION['flash']['message']; unset($_SESSION['flash']); ?>
+        </div>
+      <?php endif; ?>
 
       <!-- Stats Cards -->
       <div class="stats-grid">
@@ -847,17 +1148,17 @@ if ($result && $result->num_rows > 0) {
           </div>
         </div>
 
-        <div class="stat-card warning">
+        <div class="stat-card info">
           <div class="stat-header">
             <div>
-              <div class="stat-value">₱<?php echo number_format($discountAmount, 2); ?></div>
-              <div class="stat-label">Discounts</div>
+              <div class="stat-value">₱<?php echo number_format($onlineSales, 2); ?></div>
+              <div class="stat-label">Online Sales</div>
             </div>
             <div class="stat-icon">
-              <i class="fas fa-tag"></i>
+              <i class="fas fa-globe"></i>
             </div>
           </div>
-          <div class="stat-change negative">
+          <div class="stat-change positive">
             <i class="fas fa-arrow-up"></i> 8.2% from last month
           </div>
         </div>
@@ -865,11 +1166,11 @@ if ($result && $result->num_rows > 0) {
         <div class="stat-card success">
           <div class="stat-header">
             <div>
-              <div class="stat-value">₱<?php echo number_format($netSales, 2); ?></div>
-              <div class="stat-label">Net Sales</div>
+              <div class="stat-value">₱<?php echo number_format($physicalSales, 2); ?></div>
+              <div class="stat-label">Physical Sales</div>
             </div>
             <div class="stat-icon">
-              <i class="fas fa-chart-line"></i>
+              <i class="fas fa-store"></i>
             </div>
           </div>
           <div class="stat-change positive">
@@ -897,9 +1198,42 @@ if ($result && $result->num_rows > 0) {
       <div class="content-grid">
         <div class="chart-container">
           <div class="section-header">
-            <div class="section-title">Monthly Sales</div>
+            <div class="section-title">Sales Analytics</div>
             <a href="#" class="view-all">View Report <i class="fas fa-arrow-right"></i></a>
           </div>
+          
+          <!-- Chart Filters -->
+          <form method="GET" class="chart-controls">
+            <div class="filter-group">
+              <select name="chart_filter" class="filter-select" onchange="this.form.submit()">
+                <option value="day" <?= $chartFilter == 'day' ? 'selected' : '' ?>>Daily</option>
+                <option value="week" <?= $chartFilter == 'week' ? 'selected' : '' ?>>Weekly</option>
+                <option value="month" <?= $chartFilter == 'month' ? 'selected' : '' ?>>Monthly</option>
+                <option value="year" <?= $chartFilter == 'year' ? 'selected' : '' ?>>Yearly</option>
+              </select>
+              
+              <select name="order_type" class="filter-select" onchange="this.form.submit()">
+                <option value="all" <?= $orderTypeFilter == 'all' ? 'selected' : '' ?>>All Sales</option>
+                <option value="online" <?= $orderTypeFilter == 'online' ? 'selected' : '' ?>>Online Only</option>
+                <option value="physical" <?= $orderTypeFilter == 'physical' ? 'selected' : '' ?>>Physical Only</option>
+              </select>
+            </div>
+            
+            <div class="filter-group">
+              <input type="date" name="start_date" class="date-input" value="<?= $startDate ?>" placeholder="Start Date">
+              <span>to</span>
+              <input type="date" name="end_date" class="date-input" value="<?= $endDate ?>" placeholder="End Date">
+            </div>
+            
+            <button type="submit" class="filter-btn">
+              <i class="fas fa-filter"></i> Apply
+            </button>
+            
+            <a href="sales.php" class="filter-btn" style="background: var(--gray); text-decoration: none;">
+              <i class="fas fa-refresh"></i> Reset
+            </a>
+          </form>
+          
           <div class="chart-placeholder">
             <canvas id="salesChart" width="400" height="300"></canvas>
           </div>
@@ -943,11 +1277,12 @@ if ($result && $result->num_rows > 0) {
           <div class="section-title">Sales Records</div>
         </div>
         
-        <form method="POST">
+        <!-- Bulk Actions Form -->
+        <form method="POST" id="bulkForm">
           <div class="table-actions">
             <div class="search-box">
               <i class="fas fa-search"></i>
-              <input type="text" id="searchInput" placeholder="Search products, date...">
+              <input type="text" id="searchInput" placeholder="Search products, customers, date...">
             </div>
             <div class="action-buttons">
               <button type="submit" name="update_selected" class="btn btn-success">
@@ -966,12 +1301,15 @@ if ($result && $result->num_rows > 0) {
                   <input type="checkbox" id="selectAll">
                 </th>
                 <th>Date</th>
+                <th>Order Type</th>
+                <th>Customer</th>
                 <th>Product</th>
                 <th>Quantity</th>
                 <th>Total</th>
                 <th>Profit</th>
                 <th>Profit After Discount</th>
                 <th>Level</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -981,24 +1319,74 @@ if ($result && $result->num_rows > 0) {
                 $discount = $skuMargins[$sku]['discount'] ?? 0;
                 $profitAfter = $skuMargins[$sku]['profit_after_discount'] ?? $profit;
                 $level = $skuMargins[$sku]['level'] ?? 'Low';
+                
+                // Determine customer display
+                $customerDisplay = 'N/A';
+                $customerInfo = '';
+                
+                if ($row['order_type'] === 'physical') {
+                    if (!empty($row['customer_name'])) {
+                        $customerDisplay = htmlspecialchars($row['customer_name']);
+                        if (!empty($row['customer_phone'])) {
+                            $customerInfo = ' (' . $row['customer_phone'] . ')';
+                        }
+                    }
+                } else {
+                    // Online order - get from users table
+                    if (!empty($row['user_fullname'])) {
+                        $customerDisplay = htmlspecialchars($row['user_fullname']);
+                        if (!empty($row['order_customer_name'])) {
+                            $customerInfo = ' (' . $row['order_customer_name'] . ')';
+                        }
+                    } elseif (!empty($row['order_customer_name'])) {
+                        $customerDisplay = htmlspecialchars($row['order_customer_name']);
+                    }
+                }
               ?>
               <tr>
                 <td class="checkbox-cell">
                   <input type="checkbox" name="selected_sales[]" value="<?= $row['id'] ?>">
                 </td>
-                <td><?= htmlspecialchars($row['sale_date']) ?></td>
+                <td><?= date('M j, Y', strtotime($row['sale_date'])) ?></td>
+                <td>
+                  <span class="order-type-badge order-type-<?= $row['order_type'] ?>">
+                    <?= ucfirst($row['order_type']) ?>
+                  </span>
+                  <?php if ($row['order_type'] === 'physical' && !empty($row['payment_method'])): ?>
+                    <br><span class="payment-badge"><?= ucfirst($row['payment_method']) ?></span>
+                  <?php endif; ?>
+                </td>
+                <td>
+                  <div class="customer-name"><?= $customerDisplay ?></div>
+                  <?php if (!empty($customerInfo)): ?>
+                    <div class="customer-email"><?= $customerInfo ?></div>
+                  <?php endif; ?>
+                </td>
                 <td><?= htmlspecialchars($sku) ?></td>
                 <td>
                   <input type="number" class="qty-input" name="quantity[<?= $row['id'] ?>]" 
                          value="<?= $row['quantity'] ?>" min="1">
                 </td>
-                <td>₱<?= number_format($row['total'],2) ?></td>
+                <td>
+                  <input type="number" class="total-input" name="total[<?= $row['id'] ?>]" 
+                         value="<?= $row['total'] ?>" min="0" step="0.01">
+                </td>
                 <td>₱<?= number_format($profit,2) ?></td>
                 <td>₱<?= number_format($profitAfter,2) ?></td>
                 <td>
                   <span class="level-badge level-<?= strtolower($level) ?>">
                     <?= $level ?>
                   </span>
+                </td>
+                <td>
+                  <form method="POST" class="edit-form" onsubmit="return confirm('Update this sale?');">
+                    <input type="hidden" name="sale_id" value="<?= $row['id'] ?>">
+                    <input type="hidden" name="quantity" value="<?= $row['quantity'] ?>">
+                    <input type="hidden" name="total" value="<?= $row['total'] ?>">
+                    <button type="submit" name="update_sale" class="edit-btn">
+                      <i class="fas fa-save"></i> Save
+                    </button>
+                  </form>
                 </td>
               </tr>
               <?php endforeach; ?>
@@ -1041,6 +1429,9 @@ document.addEventListener('DOMContentLoaded', function() {
       if (themeToggle) themeToggle.checked = false;
     }
   }, 100);
+  
+  // Initialize chart
+  initializeSalesChart();
 });
 
 // Theme toggle event
@@ -1060,9 +1451,114 @@ if (themeToggle) {
         localStorage.setItem('theme', 'light');
       }
       
+      // Reinitialize chart with new theme
+      initializeSalesChart();
+      
       // Remove loading state
       document.body.style.pointerEvents = 'auto';
     }, 200);
+  });
+}
+
+// Initialize Sales Chart with Chart.js
+function initializeSalesChart() {
+  const ctx = document.getElementById('salesChart').getContext('2d');
+  
+  // Get chart data from PHP
+  const chartData = <?php echo json_encode($monthlySalesData); ?>;
+  const chartLabels = <?php echo json_encode($chartLabels); ?>;
+  
+  // Determine if dark mode is active
+  const isDarkMode = document.body.classList.contains('dark-mode');
+  
+  // Chart colors based on theme
+  const gridColor = isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+  const textColor = isDarkMode ? '#f1f5f9' : '#1e293b';
+  const primaryColor = '#4361ee';
+  const gradientColor = isDarkMode 
+    ? 'rgba(67, 97, 238, 0.3)' 
+    : 'rgba(67, 97, 238, 0.2)';
+  
+  // Create gradient
+  const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+  gradient.addColorStop(0, gradientColor);
+  gradient.addColorStop(1, 'rgba(67, 97, 238, 0.05)');
+  
+  // Destroy existing chart if it exists
+  if (window.salesChartInstance) {
+    window.salesChartInstance.destroy();
+  }
+  
+  // Create new chart
+  window.salesChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: chartLabels,
+      datasets: [{
+        label: 'Sales',
+        data: chartData,
+        backgroundColor: gradient,
+        borderColor: primaryColor,
+        borderWidth: 2,
+        tension: 0.4,
+        fill: true,
+        pointBackgroundColor: primaryColor,
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          backgroundColor: isDarkMode ? '#1e293b' : '#fff',
+          titleColor: textColor,
+          bodyColor: textColor,
+          borderColor: primaryColor,
+          borderWidth: 1,
+          callbacks: {
+            label: function(context) {
+              return '₱' + context.parsed.y.toLocaleString();
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          grid: {
+            color: gridColor
+          },
+          ticks: {
+            color: textColor,
+            callback: function(value) {
+              return '₱' + value.toLocaleString();
+            }
+          }
+        },
+        x: {
+          grid: {
+            color: gridColor
+          },
+          ticks: {
+            color: textColor
+          }
+        }
+      },
+      interaction: {
+        mode: 'nearest',
+        axis: 'x',
+        intersect: false
+      }
+    }
   });
 }
 
@@ -1086,47 +1582,38 @@ if (themeToggle) {
       });
     }
 
-    // Simple Chart Implementation
-    const salesChart = document.getElementById('salesChart').getContext('2d');
-    
-    // Create gradient
-    const gradient = salesChart.createLinearGradient(0, 0, 0, 300);
-    gradient.addColorStop(0, 'rgba(67, 97, 238, 0.5)');
-    gradient.addColorStop(1, 'rgba(67, 97, 238, 0.1)');
-    
-    // Chart data
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const salesData = <?php echo json_encode($monthlySalesData); ?>;
-    
-    // Draw chart
-    salesChart.beginPath();
-    salesChart.moveTo(30, 250);
-    
-    for (let i = 0; i < salesData.length; i++) {
-      const x = 30 + (i * 30);
-      // Normalize data to fit in chart (assuming max value is 10000 for demo)
-      const y = 250 - (salesData[i] / 10000 * 200);
-      salesChart.lineTo(x, y);
-    }
-    
-    salesChart.strokeStyle = '#4361ee';
-    salesChart.lineWidth = 2;
-    salesChart.stroke();
-    
-    // Fill area under the line
-    salesChart.lineTo(30 + (11 * 30), 250);
-    salesChart.closePath();
-    salesChart.fillStyle = gradient;
-    salesChart.fill();
-    
-    // Add month labels
-    salesChart.fillStyle = document.body.classList.contains('dark-mode') ? '#94a3b8' : '#64748b';
-    salesChart.font = '10px Arial';
-    salesChart.textAlign = 'center';
-    
-    for (let i = 0; i < months.length; i++) {
-      salesChart.fillText(months[i], 30 + (i * 30), 270);
-    }
+    // Set default date range to last 30 days if not set
+    document.addEventListener('DOMContentLoaded', function() {
+      const startDateInput = document.querySelector('input[name="start_date"]');
+      const endDateInput = document.querySelector('input[name="end_date"]');
+      
+      if (startDateInput && !startDateInput.value) {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        startDateInput.value = thirtyDaysAgo.toISOString().split('T')[0];
+      }
+      
+      if (endDateInput && !endDateInput.value) {
+        endDateInput.value = new Date().toISOString().split('T')[0];
+      }
+    });
+
+    // Update individual edit forms with current input values
+    document.querySelectorAll('.edit-form').forEach(form => {
+      const row = form.closest('tr');
+      const qtyInput = row.querySelector('.qty-input');
+      const totalInput = row.querySelector('.total-input');
+      const hiddenQty = form.querySelector('input[name="quantity"]');
+      const hiddenTotal = form.querySelector('input[name="total"]');
+      
+      qtyInput.addEventListener('change', function() {
+        hiddenQty.value = this.value;
+      });
+      
+      totalInput.addEventListener('change', function() {
+        hiddenTotal.value = this.value;
+      });
+    });
   </script>
 </body>
 </html>

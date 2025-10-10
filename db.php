@@ -13,5 +13,7 @@ if ($conn->connect_error) {
     error_log("Database connection failed: " . $conn->connect_error);
     // Don't die in production, handle gracefully
     $db_error = "Database connection failed. Please try again later.";
+} else {
+    $db_error = null; // No error
 }
 ?>

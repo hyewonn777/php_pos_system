@@ -807,6 +807,10 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
           <i class="fas fa-boxes"></i>
           <span class="menu-text">Inventory</span>
         </a>
+        <a href="physical_orders.php" class="menu-item">
+          <i class="fas fa-store"></i>
+          <span class="menu-text">Physical Orders</span>
+        </a>
         <a href="appointment.php" class="menu-item">
           <i class="fas fa-calendar-alt"></i>
           <span class="menu-text">Appointments</span>
@@ -818,7 +822,7 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
       </div>
       <div class="sidebar-footer">
         <form action="logout.php" method="POST">
-          <button type="submit" style="background: var(--danger); color: white; border: none; padding: 10px; width: 100%; border-radius: 6px; cursor: pointer; transition: var(--transition);">
+          <button type="submit" style="background: var(--danger); color: white; border: none; padding: 10px; width: 100%; border-radius: 6px; cursor: pointer;">
             <i class="fas fa-sign-out-alt"></i> Logout
           </button>
         </form>
@@ -850,13 +854,6 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
           <?= $_SESSION['flash']['message']; unset($_SESSION['flash']); ?>
         </div>
       <?php endif; ?>
-
-      <!-- Debug Info (remove in production) -->
-      <div class="debug-info">
-        <strong>Debug Info:</strong> 
-        Products in DB: <?= $resAll->num_rows ?>, 
-        DB Connected: <?= $conn->ping() ? 'Yes' : 'No' ?>
-      </div>
 
       <!-- Stats Cards -->
       <div class="stats-grid">
