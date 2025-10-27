@@ -1,7 +1,17 @@
 ﻿<?php
-require 'auth.php';
+// Apply the patch - Admin session authentication
+session_name('admin_session');
+session_start();
+
+if (!isset($_SESSION['admin_id'])) {
+    header("Location: login.php");
+    exit();
+}
+
+// Set current_role for any remaining references in the HTML
+$current_role = 'admin'; // Since we're using admin session, all users are admins
+
 require 'db.php';
-if (session_status() === PHP_SESSION_NONE) session_start();
 
 // Enhanced error reporting
 ini_set('display_errors', 1);
@@ -31,6 +41,181 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($_FILES)) {
         debug_log("FILES Data: " . print_r($_FILES, true));
     }
+}
+
+/* ------------------ CSV EXPORT ------------------ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['export_csv'])) {
+    debug_log("CSV Export triggered");
+    
+    // Get all active products
+    $result = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id ASC");
+    
+    if ($result->num_rows > 0) {
+        // Set headers for download
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="inventory_export_' . date('Y-m-d_H-i-s') . '.csv"');
+        
+        // Create output stream
+        $output = fopen('php://output', 'w');
+        
+        // Add BOM for UTF-8
+        fwrite($output, "\xEF\xBB\xBF");
+        
+        // CSV headers
+        fputcsv($output, ['ID', 'Category', 'Product Name', 'Quantity', 'Price', 'Image Path', 'Created At']);
+        
+        // Add data rows
+        while ($row = $result->fetch_assoc()) {
+            fputcsv($output, [
+                $row['id'],
+                $row['category'],
+                $row['name'],
+                $row['qty'],
+                $row['price'],
+                $row['image_path'],
+                $row['created_at']
+            ]);
+        }
+        
+        fclose($output);
+        debug_log("CSV export completed successfully");
+        exit;
+    } else {
+        $_SESSION['flash'] = ['message' => "No products found to export.", 'type' => 'warning'];
+        debug_log("CSV export - no products found");
+        header("Location: stock.php");
+        exit;
+    }
+}
+
+/* ------------------ CSV IMPORT ------------------ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import_csv'])) {
+    debug_log("CSV Import triggered");
+    
+    if (isset($_FILES['csv_file']) && $_FILES['csv_file']['error'] === UPLOAD_ERR_OK) {
+        $fileName = $_FILES['csv_file']['tmp_name'];
+        
+        if ($_FILES['csv_file']['size'] > 0) {
+            $file = fopen($fileName, "r");
+            
+            // Skip BOM if exists
+            $bom = fread($file, 3);
+            if ($bom != "\xEF\xBB\xBF") {
+                rewind($file);
+            }
+            
+            // Read headers
+            $headers = fgetcsv($file);
+            
+            $importCount = 0;
+            $errorCount = 0;
+            $errors = [];
+            
+            // Process each row
+            while (($row = fgetcsv($file)) !== FALSE) {
+                if (count($row) < 5) continue; // Skip invalid rows
+                
+                $id = isset($row[0]) ? trim($row[0]) : '';
+                $category = isset($row[1]) ? trim($row[1]) : '';
+                $name = isset($row[2]) ? trim($row[2]) : '';
+                $qty = isset($row[3]) ? intval(trim($row[3])) : 0;
+                $price = isset($row[4]) ? floatval(trim($row[4])) : 0;
+                $image_path = isset($row[5]) ? trim($row[5]) : '';
+                
+                // Validate required fields
+                if (empty($category) || empty($name) || $price <= 0) {
+                    $errorCount++;
+                    $errors[] = "Row " . ($importCount + $errorCount + 1) . ": Missing required fields";
+                    continue;
+                }
+                
+                // Check if product exists (by ID or name)
+                $existingProduct = null;
+                if (!empty($id)) {
+                    $checkStmt = $conn->prepare("SELECT id FROM stock WHERE id = ? AND status='active'");
+                    $checkStmt->bind_param("i", $id);
+                    $checkStmt->execute();
+                    $existingProduct = $checkStmt->get_result()->fetch_assoc();
+                    $checkStmt->close();
+                }
+                
+                if ($existingProduct) {
+                    // Update existing product
+                    $updateStmt = $conn->prepare("UPDATE stock SET category=?, name=?, qty=?, price=?, image_path=? WHERE id=?");
+                    $updateStmt->bind_param("ssidsi", $category, $name, $qty, $price, $image_path, $id);
+                    if ($updateStmt->execute()) {
+                        $importCount++;
+                    } else {
+                        $errorCount++;
+                        $errors[] = "Row " . ($importCount + $errorCount + 1) . ": " . $updateStmt->error;
+                    }
+                    $updateStmt->close();
+                } else {
+                    // Insert new product
+                    $insertStmt = $conn->prepare("INSERT INTO stock (category, name, qty, price, image_path) VALUES (?, ?, ?, ?, ?)");
+                    $insertStmt->bind_param("ssids", $category, $name, $qty, $price, $image_path);
+                    if ($insertStmt->execute()) {
+                        $importCount++;
+                    } else {
+                        $errorCount++;
+                        $errors[] = "Row " . ($importCount + $errorCount + 1) . ": " . $insertStmt->error;
+                    }
+                    $insertStmt->close();
+                }
+            }
+            
+            fclose($file);
+            
+            if ($importCount > 0) {
+                $_SESSION['flash'] = [
+                    'message' => "Successfully imported $importCount products." . ($errorCount > 0 ? " $errorCount errors occurred." : ""),
+                    'type' => 'success'
+                ];
+                debug_log("CSV import completed: $importCount products imported, $errorCount errors");
+            } else {
+                $_SESSION['flash'] = [
+                    'message' => "No products were imported. " . ($errorCount > 0 ? "Errors: " . implode(", ", array_slice($errors, 0, 3)) : ""),
+                    'type' => 'error'
+                ];
+                debug_log("CSV import failed: No products imported");
+            }
+        } else {
+            $_SESSION['flash'] = ['message' => "The uploaded file is empty.", 'type' => 'error'];
+            debug_log("CSV import - empty file");
+        }
+    } else {
+        $_SESSION['flash'] = ['message' => "Please select a valid CSV file to import.", 'type' => 'error'];
+        debug_log("CSV import - no file selected");
+    }
+    
+    header("Location: stock.php");
+    exit;
+}
+
+/* ------------------ DOWNLOAD TEMPLATE ------------------ */
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['download_template'])) {
+    debug_log("CSV Template download triggered");
+    
+    // Set headers for download
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="inventory_template.csv"');
+    
+    // Create output stream
+    $output = fopen('php://output', 'w');
+    
+    // Add BOM for UTF-8
+    fwrite($output, "\xEF\xBB\xBF");
+    
+    // CSV headers with descriptions
+    fputcsv($output, ['ID (Leave empty for new products)', 'Category *', 'Product Name *', 'Quantity', 'Price *', 'Image Path (Optional)', 'Created At (Auto-filled)']);
+    
+    // Add sample data
+    fputcsv($output, ['', 'Electronics', 'Sample Product', '10', '99.99', 'uploads/sample.jpg', '']);
+    fputcsv($output, ['', 'Clothing', 'T-Shirt', '25', '29.99', '', '']);
+    
+    fclose($output);
+    debug_log("CSV template downloaded successfully");
+    exit;
 }
 
 /* ------------------ BULK DELETE ------------------ */
@@ -208,6 +393,17 @@ $lowStockCount = $conn->query("SELECT COUNT(*) as cnt FROM stock WHERE status='a
 $resAll = $conn->query("SELECT * FROM stock WHERE status='active' ORDER BY id ASC");
 
 debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
+
+// Get username for welcome message - using admin session
+$username = isset($_SESSION['admin_username']) ? $_SESSION['admin_username'] : 'Admin';
+$hour = date('H');
+if ($hour < 12) {
+    $greeting = "Good morning";
+} elseif ($hour < 13) {
+    $greeting = "Good afternoon";
+} else {
+    $greeting = "Good evening";
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -220,9 +416,10 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
     :root {
       --primary: #4361ee;
       --primary-dark: #3a56d4;
+      --primary-light: #4cc9f0;
       --secondary: #7209b7;
-      --success: #4cc9f0;
-      --warning: #f72585;
+      --success: #10b981;
+      --warning: #f59e0b;
       --danger: #e63946;
       --info: #4895ef;
       --light: #f8f9fa;
@@ -231,18 +428,21 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
       --gray-light: #adb5bd;
       --sidebar-width: 260px;
       --header-height: 70px;
-      --card-radius: 12px;
-      --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      --card-radius: 16px;
+      --transition: all 0.3s ease;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+      --shadow-hover: 0 20px 40px rgba(0, 0, 0, 0.12);
     }
 
     .dark-mode {
-      --bg: #121826;
-      --card-bg: #1e293b;
+      --bg: #0f1419;
+      --card-bg: #1a222d;
       --text: #f1f5f9;
       --text-muted: #94a3b8;
-      --sidebar-bg: #0f172a;
-      --border: #334155;
-      --shadow: rgba(0, 0, 0, 0.3);
+      --sidebar-bg: #0a0f14;
+      --border: #2a3341;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      --shadow-hover: 0 20px 40px rgba(0, 0, 0, 0.3);
     }
 
     .light-mode {
@@ -252,14 +452,13 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
       --text-muted: #64748b;
       --sidebar-bg: #1e293b;
       --border: #e2e8f0;
-      --shadow: rgba(0, 0, 0, 0.1);
     }
 
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
 
     body {
@@ -267,6 +466,7 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
       color: var(--text);
       transition: var(--transition);
       line-height: 1.6;
+      overflow-x: hidden;
     }
 
     .container {
@@ -274,40 +474,45 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
       min-height: 100vh;
     }
 
+    /* Sidebar Styles */
     .sidebar {
       width: var(--sidebar-width);
-      background: var(--sidebar-bg);
+      background: linear-gradient(180deg, var(--sidebar-bg) 0%, #151f2e 100%);
       color: white;
       height: 100vh;
       position: fixed;
       overflow-y: auto;
       transition: var(--transition);
       z-index: 1000;
+      box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
     }
 
     .sidebar-header {
-      padding: 20px;
+      padding: 24px 20px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.1);
       display: flex;
       align-items: center;
       gap: 12px;
+      background: rgba(0, 0, 0, 0.2);
     }
 
     .logo {
-      width: 40px;
-      height: 40px;
-      border-radius: 8px;
-      background: var(--primary);
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: bold;
-      font-size: 18px;
+      font-size: 20px;
+      box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3);
     }
 
     .sidebar-title {
       font-size: 18px;
-      font-weight: 600;
+      font-weight: 700;
+      letter-spacing: 0.5px;
     }
 
     .sidebar-menu {
@@ -317,22 +522,47 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
     .menu-item {
       display: flex;
       align-items: center;
-      padding: 12px 20px;
+      padding: 14px 20px;
       color: rgba(255, 255, 255, 0.8);
       text-decoration: none;
       transition: var(--transition);
-      gap: 12px;
+      gap: 14px;
+      margin: 4px 12px;
+      border-radius: 10px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .menu-item:before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+      transition: left 0.5s;
+    }
+
+    .menu-item:hover:before {
+      left: 100%;
     }
 
     .menu-item:hover, .menu-item.active {
       background: rgba(255, 255, 255, 0.1);
       color: white;
+      transform: translateX(5px);
+    }
+
+    .menu-item.active {
+      background: linear-gradient(90deg, rgba(67, 97, 238, 0.3) 0%, rgba(67, 97, 238, 0.1) 100%);
       border-left: 4px solid var(--primary);
     }
 
     .menu-item i {
       width: 20px;
       text-align: center;
+      font-size: 18px;
     }
 
     .sidebar-footer {
@@ -341,31 +571,71 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
       margin-top: auto;
     }
 
+    .logout-btn {
+      background: linear-gradient(135deg, var(--danger) 0%, #c53030 100%);
+      color: white;
+      border: none;
+      padding: 12px;
+      width: 100%;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: var(--transition);
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(230, 57, 70, 0.3);
+    }
+
+    .logout-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(230, 57, 70, 0.4);
+    }
+
+    /* Main Content */
     .main-content {
       flex: 1;
       margin-left: var(--sidebar-width);
-      padding: 20px;
+      padding: 25px;
       transition: var(--transition);
+      background: var(--bg);
     }
 
+    /* Header */
     .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0 0 20px 0;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 25px;
+      padding: 0 0 25px 0;
+      margin-bottom: 30px;
+      position: relative;
+    }
+
+    .header:after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
     }
 
     .header-title h1 {
-      font-size: 28px;
-      font-weight: 700;
-      margin-bottom: 5px;
+      font-size: 32px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
     }
 
     .header-title p {
       color: var(--text-muted);
       font-size: 16px;
+      font-weight: 500;
     }
 
     .header-actions {
@@ -374,10 +644,10 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
       gap: 15px;
     }
 
-    .theme-toggle, .notification-btn, .user-menu {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
+    .theme-toggle, .notification-btn, .user-menu, .menu-toggle {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -386,104 +656,440 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
       cursor: pointer;
       transition: var(--transition);
       border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
     }
 
-    .theme-toggle:hover, .notification-btn:hover, .user-menu:hover {
-      background: var(--primary);
+    .theme-toggle:before, .notification-btn:before, .user-menu:before, .menu-toggle:before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(67, 97, 238, 0.1), transparent);
+      transition: left 0.5s;
+    }
+
+    .theme-toggle:hover:before, .notification-btn:hover:before, .user-menu:hover:before, .menu-toggle:hover:before {
+      left: 100%;
+    }
+
+    .theme-toggle:hover, .notification-btn:hover, .user-menu:hover, .menu-toggle:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-hover);
+    }
+
+    .notification-badge {
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      background: linear-gradient(135deg, var(--danger) 0%, #c53030 100%);
       color: white;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      box-shadow: 0 2px 8px rgba(230, 57, 70, 0.4);
     }
 
+    .notification-wrapper {
+      position: relative;
+    }
+
+    /* Stats Cards */
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 20px;
-      margin-bottom: 30px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 24px;
+      margin-bottom: 40px;
     }
 
     .stat-card {
       background: var(--card-bg);
       border-radius: var(--card-radius);
-      padding: 24px;
-      box-shadow: 0 4px 12px var(--shadow);
+      padding: 28px;
+      box-shadow: var(--shadow);
       transition: var(--transition);
       border-left: 4px solid var(--primary);
       cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card:before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.5s ease;
+    }
+
+    .stat-card:hover:before {
+      transform: scaleX(1);
     }
 
     .stat-card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 10px 20px var(--shadow);
+      transform: translateY(-8px);
+      box-shadow: var(--shadow-hover);
     }
 
     .stat-card.warning {
       border-left-color: var(--warning);
     }
 
+    .stat-card.warning:before {
+      background: linear-gradient(90deg, var(--warning) 0%, #fbbf24 100%);
+    }
+
     .stat-card.danger {
       border-left-color: var(--danger);
+    }
+
+    .stat-card.danger:before {
+      background: linear-gradient(90deg, var(--danger) 0%, #c53030 100%);
     }
 
     .stat-card.success {
       border-left-color: var(--success);
     }
 
+    .stat-card.success:before {
+      background: linear-gradient(90deg, var(--success) 0%, #34d399 100%);
+    }
+
     .stat-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      margin-bottom: 15px;
+      align-items: flex-start;
+      margin-bottom: 20px;
     }
 
     .stat-icon {
-      width: 50px;
-      height: 50px;
-      border-radius: 10px;
+      width: 60px;
+      height: 60px;
+      border-radius: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
-      background: rgba(67, 97, 238, 0.1);
+      font-size: 26px;
+      background: linear-gradient(135deg, rgba(67, 97, 238, 0.1) 0%, rgba(67, 97, 238, 0.05) 100%);
       color: var(--primary);
+      box-shadow: 0 4px 12px rgba(67, 97, 238, 0.15);
     }
 
     .stat-card.warning .stat-icon {
-      background: rgba(247, 37, 133, 0.1);
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);
       color: var(--warning);
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
     }
 
     .stat-card.danger .stat-icon {
-      background: rgba(230, 57, 70, 0.1);
+      background: linear-gradient(135deg, rgba(230, 57, 70, 0.1) 0%, rgba(230, 57, 70, 0.05) 100%);
       color: var(--danger);
+      box-shadow: 0 4px 12px rgba(230, 57, 70, 0.15);
     }
 
     .stat-card.success .stat-icon {
-      background: rgba(76, 201, 240, 0.1);
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
       color: var(--success);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
     }
 
     .stat-value {
-      font-size: 28px;
-      font-weight: 700;
-      margin-bottom: 5px;
+      font-size: 32px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      background: linear-gradient(90deg, var(--text) 0%, var(--text-muted) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
 
     .stat-label {
       color: var(--text-muted);
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    /* CSV Operations Card */
+    .csv-card {
+      background: var(--card-bg);
+      border-radius: var(--card-radius);
+      padding: 28px;
+      box-shadow: var(--shadow);
+      margin-bottom: 30px;
+      transition: var(--transition);
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .csv-card:before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, var(--info) 0%, var(--primary-light) 100%);
+    }
+
+    .csv-card:hover {
+      transform: translateY(-5px);
+      box-shadow: var(--shadow-hover);
+    }
+
+    .csv-header {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+
+    .csv-icon {
+      width: 60px;
+      height: 60px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      background: linear-gradient(135deg, rgba(72, 149, 239, 0.1) 0%, rgba(72, 149, 239, 0.05) 100%);
+      color: var(--info);
+      box-shadow: 0 4px 12px rgba(72, 149, 239, 0.15);
+    }
+
+    .csv-title {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+
+    .csv-description {
+      color: var(--text-muted);
       font-size: 14px;
     }
 
+    .csv-actions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .csv-action-item {
+      background: rgba(0, 0, 0, 0.02);
+      border-radius: 12px;
+      padding: 20px;
+      border: 1px solid var(--border);
+      transition: var(--transition);
+    }
+
+    .dark-mode .csv-action-item {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .csv-action-item:hover {
+      background: rgba(67, 97, 238, 0.03);
+      transform: translateY(-3px);
+    }
+
+    .action-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 15px;
+    }
+
+    .action-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .action-icon.export {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
+      color: var(--success);
+    }
+
+    .action-icon.import {
+      background: linear-gradient(135deg, rgba(72, 149, 239, 0.1) 0%, rgba(72, 149, 239, 0.05) 100%);
+      color: var(--info);
+    }
+
+    .action-icon.template {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);
+      color: var(--warning);
+    }
+
+    .action-icon.help {
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(139, 92, 246, 0.05) 100%);
+      color: #8b5cf6;
+    }
+
+    .action-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .action-description {
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    .csv-form {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      width: 100%;
+    }
+
+    /* Custom File Upload Styles */
+    .file-upload-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
+    .file-upload-input {
+      position: absolute;
+      left: 0;
+      top: 0;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+      z-index: 2;
+    }
+
+    .file-upload-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: linear-gradient(135deg, var(--info) 0%, #3b82f6 100%);
+      color: white;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      box-shadow: 0 4px 12px rgba(72, 149, 239, 0.3);
+      width: 100%;
+      text-align: center;
+    }
+
+    .file-upload-label:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(72, 149, 239, 0.4);
+    }
+
+    .file-name {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: center;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .import-button {
+      padding: 10px 16px;
+      border-radius: 10px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      background: linear-gradient(135deg, var(--success) 0%, #0d9c6d 100%);
+      color: white;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+      white-space: nowrap;
+    }
+
+    .import-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
+    }
+
+    .import-button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Form Container */
     .form-container {
       background: var(--card-bg);
       border-radius: var(--card-radius);
-      padding: 24px;
-      box-shadow: 0 4px 12px var(--shadow);
+      padding: 28px;
+      box-shadow: var(--shadow);
       margin-bottom: 30px;
+      transition: var(--transition);
+      border: 1px solid var(--border);
+    }
+
+    .form-container:hover {
+      box-shadow: var(--shadow-hover);
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 700;
+      position: relative;
+      padding-left: 12px;
+    }
+
+    .section-title:before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      height: 100%;
+      width: 4px;
+      background: linear-gradient(180deg, var(--primary) 0%, var(--primary-light) 100%);
+      border-radius: 4px;
     }
 
     .form-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
+      gap: 20px;
       align-items: end;
     }
 
@@ -494,19 +1100,20 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
 
     .form-group label {
       margin-bottom: 8px;
-      font-weight: 500;
-      color: var(--text-muted);
+      font-weight: 600;
+      color: var(--text);
       font-size: 14px;
     }
 
     .form-control {
-      padding: 12px 16px;
+      padding: 14px 16px;
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 10px;
       background: var(--card-bg);
       color: var(--text);
       font-size: 14px;
       transition: var(--transition);
+      font-family: inherit;
     }
 
     .form-control:focus {
@@ -516,67 +1123,102 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
     }
 
     .btn {
-      padding: 12px 20px;
-      border-radius: 8px;
+      padding: 12px 18px;
+      border-radius: 10px;
       border: none;
       font-weight: 600;
       cursor: pointer;
       transition: var(--transition);
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 8px;
+      font-family: inherit;
+      font-size: 14px;
     }
 
     .btn-primary {
-      background: var(--primary);
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
       color: white;
+      box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3);
     }
 
     .btn-primary:hover {
-      background: var(--primary-dark);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(67, 97, 238, 0.4);
     }
 
     .btn-success {
-      background: var(--success);
+      background: linear-gradient(135deg, var(--success) 0%, #0d9c6d 100%);
       color: white;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
     }
 
     .btn-success:hover {
-      background: #3aa8d8;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
     }
 
     .btn-danger {
-      background: var(--danger);
+      background: linear-gradient(135deg, var(--danger) 0%, #c53030 100%);
       color: white;
+      box-shadow: 0 4px 12px rgba(230, 57, 70, 0.3);
     }
 
     .btn-danger:hover {
-      background: #c53030;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(230, 57, 70, 0.4);
     }
 
     .btn-warning {
-      background: var(--warning);
+      background: linear-gradient(135deg, var(--warning) 0%, #d97706 100%);
       color: white;
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
     }
 
     .btn-warning:hover {
-      background: #d61a6e;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(245, 158, 11, 0.4);
     }
 
+    .btn-info {
+      background: linear-gradient(135deg, var(--info) 0%, #3b82f6 100%);
+      color: white;
+      box-shadow: 0 4px 12px rgba(72, 149, 239, 0.3);
+    }
+
+    .btn-info:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(72, 149, 239, 0.4);
+    }
+
+    .btn-sm {
+      padding: 10px 16px;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    /* Table Container */
     .table-container {
       background: var(--card-bg);
       border-radius: var(--card-radius);
-      padding: 24px;
-      box-shadow: 0 4px 12px var(--shadow);
+      padding: 28px;
+      box-shadow: var(--shadow);
       margin-bottom: 30px;
       overflow-x: auto;
+      transition: var(--transition);
+      border: 1px solid var(--border);
+    }
+
+    .table-container:hover {
+      box-shadow: var(--shadow-hover);
     }
 
     .table-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 20px;
+      margin-bottom: 24px;
     }
 
     .search-box {
@@ -586,138 +1228,94 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
 
     .search-box input {
       width: 100%;
-      padding: 10px 15px 10px 40px;
-      border-radius: 8px;
+      padding: 14px 16px 14px 44px;
+      border-radius: 10px;
       border: 1px solid var(--border);
       background: var(--card-bg);
       color: var(--text);
       font-size: 14px;
+      transition: var(--transition);
+      font-family: inherit;
+    }
+
+    .search-box input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
+      outline: none;
     }
 
     .search-box i {
       position: absolute;
-      left: 15px;
+      left: 16px;
       top: 50%;
       transform: translateY(-50%);
       color: var(--text-muted);
     }
 
-    /* Fixed Table Alignment */
+    /* Table Styles */
     .table {
       width: 100%;
       border-collapse: collapse;
-      transition: var(--transition);
       min-width: 1000px;
-      table-layout: fixed; /* Added for consistent column widths */
+      transition: var(--transition);
     }
 
     .table th, .table td {
-      padding: 14px 16px;
+      padding: 16px;
       text-align: left;
       border-bottom: 1px solid var(--border);
       transition: var(--transition);
-      vertical-align: top; /* Ensure consistent vertical alignment */
-      word-wrap: break-word;
-      overflow-wrap: break-word;
     }
 
     .table th {
       color: var(--text-muted);
-      font-weight: 500;
+      font-weight: 600;
       font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
       background: rgba(0, 0, 0, 0.02);
       position: sticky;
       top: 0;
-      z-index: 10;
-      border-bottom: 2px solid var(--border); /* Stronger border for header */
     }
 
     .dark-mode .table th {
       background: rgba(255, 255, 255, 0.02);
     }
 
-    /* Define consistent column widths */
-    .table th:nth-child(1),
-    .table td:nth-child(1) {
-      width: 50px; /* Checkbox column */
-      text-align: center;
+    .table tr {
+      transition: var(--transition);
     }
 
-    .table th:nth-child(2),
-    .table td:nth-child(2) {
-      width: 60px; /* # column */
-      text-align: center;
-    }
-
-    .table th:nth-child(3),
-    .table td:nth-child(3) {
-      width: 120px; /* Category column */
-    }
-
-    .table th:nth-child(4),
-    .table td:nth-child(4) {
-      width: 80px; /* Image column */
-      text-align: center;
-    }
-
-    .table th:nth-child(5),
-    .table td:nth-child(5) {
-      width: 200px; /* Product Name column */
-    }
-
-    .table th:nth-child(6),
-    .table td:nth-child(6) {
-      width: 100px; /* Price column */
-    }
-
-    .table th:nth-child(7),
-    .table td:nth-child(7) {
-      width: 100px; /* Quantity column */
-    }
-
-    .table th:nth-child(8),
-    .table td:nth-child(8) {
-      width: 120px; /* Total Value column */
-    }
-
-    .table th:nth-child(9),
-    .table td:nth-child(9) {
-      width: 150px; /* Actions column */
+    .table tr:hover {
+      background: rgba(67, 97, 238, 0.03);
     }
 
     .checkbox-cell {
       width: 50px;
       text-align: center;
-      transition: var(--transition);
-    }
-
-    .table tr:hover {
-      background: rgba(0, 0, 0, 0.02);
-    }
-
-    .dark-mode .table tr:hover {
-      background: rgba(255, 255, 255, 0.02);
     }
 
     .product-image {
       width: 50px;
       height: 50px;
       object-fit: cover;
-      border-radius: 6px;
+      border-radius: 8px;
+      border: 2px solid var(--border);
     }
 
     .low-stock {
-      background: rgba(239, 68, 68, 0.1) !important;
+      background: rgba(239, 68, 68, 0.05) !important;
     }
 
     .low-stock-badge {
-      background: var(--danger);
+      background: linear-gradient(135deg, var(--danger) 0%, #c53030 100%);
       color: white;
-      padding: 2px 8px;
+      padding: 4px 10px;
       border-radius: 12px;
       font-size: 11px;
       font-weight: 600;
       margin-left: 8px;
+      box-shadow: 0 2px 6px rgba(230, 57, 70, 0.3);
     }
 
     .edit-row {
@@ -727,209 +1325,394 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
     .edit-form {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 12px;
+      gap: 16px;
       align-items: end;
     }
 
+    /* Flash Message */
     .flash-message {
-      padding: 12px 20px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      font-weight: 500;
+      padding: 16px 24px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+      font-weight: 600;
       animation: slideIn 0.5s ease-out;
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     .flash-success {
-      background: rgba(16, 185, 129, 0.1);
-      color: #10b981;
-      border-left: 4px solid #10b981;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
+      color: var(--success);
+      border-left: 4px solid var(--success);
     }
 
     .flash-error {
-      background: rgba(239, 68, 68, 0.1);
-      color: #ef4444;
-      border-left: 4px solid #ef4444;
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%);
+      color: var(--danger);
+      border-left: 4px solid var(--danger);
     }
 
     .flash-warning {
-      background: rgba(245, 158, 11, 0.1);
-      color: #f59e0b;
-      border-left: 4px solid #f59e0b;
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);
+      color: var(--warning);
+      border-left: 4px solid var(--warning);
     }
 
-    .csv-tools {
-      background: var(--card-bg);
-      border-radius: var(--card-radius);
-      padding: 20px;
-      box-shadow: 0 4px 12px var(--shadow);
+    /* Welcome Section */
+    .welcome-container {
+      display: flex;
+      align-items: center;
+      gap: 15px;
       margin-bottom: 30px;
     }
 
-    .csv-actions {
+    .welcome-avatar {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
       display: flex;
-      gap: 12px;
       align-items: center;
-      flex-wrap: wrap;
+      justify-content: center;
+      color: white;
+      font-size: 24px;
+      font-weight: 700;
+      box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3);
     }
 
-    .csv-note {
-      margin-top: 12px;
-      font-size: 13px;
+    .welcome-text h2 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .welcome-text p {
       color: var(--text-muted);
+      font-size: 15px;
     }
 
+    /* Footer */
     .footer {
       text-align: center;
-      padding: 20px;
+      padding: 24px;
       color: var(--text-muted);
       font-size: 14px;
       border-top: 1px solid var(--border);
-      margin-top: 30px;
+      margin-top: 40px;
+      font-weight: 500;
     }
 
-    @media (max-width: 768px) {
+    /* Toggle Switch */
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 54px;
+      height: 28px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(135deg, var(--gray-light) 0%, var(--gray) 100%);
+      transition: .4s;
+      border-radius: 28px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 20px;
+      width: 20px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    }
+
+    input:checked + .slider {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(26px);
+    }
+
+    /* Modal Styles */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--card-bg);
+      border-radius: var(--card-radius);
+      padding: 30px;
+      box-shadow: var(--shadow-hover);
+      max-width: 500px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 24px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .modal-close:hover {
+      color: var(--danger);
+    }
+
+    .modal-body {
+      margin-bottom: 25px;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    .instructions {
+      background: rgba(67, 97, 238, 0.05);
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .instructions h4 {
+      margin-bottom: 10px;
+      color: var(--primary);
+    }
+
+    .instructions ul {
+      padding-left: 20px;
+    }
+
+    .instructions li {
+      margin-bottom: 8px;
+    }
+
+    /* Mobile Responsive */
+    .menu-toggle {
+      display: none;
+    }
+
+    @media (max-width: 992px) {
       .sidebar {
-        width: 70px;
+        transform: translateX(-100%);
+        width: 280px;
       }
-      .sidebar-title, .menu-text {
-        display: none;
+      
+      .sidebar.active {
+        transform: translateX(0);
       }
+      
       .main-content {
-        margin-left: 70px;
+        margin-left: 0;
+        padding: 20px;
       }
-      .sidebar-header {
-        justify-content: center;
-        padding: 20px 10px;
+      
+      .menu-toggle {
+        display: flex;
       }
-      .menu-item {
-        justify-content: center;
-        padding: 15px;
+      
+      .stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
       }
-      .form-grid {
-        grid-template-columns: 1fr;
+      
+      .stat-card {
+        padding: 20px;
       }
+      
+      .stat-value {
+        font-size: 24px;
+      }
+      
+      .header-title h1 {
+        font-size: 26px;
+      }
+      
       .table-header {
         flex-direction: column;
         gap: 15px;
         align-items: flex-start;
       }
+      
       .search-box {
         width: 100%;
       }
       
-      /* Reset fixed widths on mobile for better responsiveness */
-      .table {
-        table-layout: auto;
+      .form-grid {
+        grid-template-columns: 1fr;
       }
       
-      .table th:nth-child(1),
-      .table td:nth-child(1),
-      .table th:nth-child(2),
-      .table td:nth-child(2),
-      .table th:nth-child(3),
-      .table td:nth-child(3),
-      .table th:nth-child(4),
-      .table td:nth-child(4),
-      .table th:nth-child(5),
-      .table td:nth-child(5),
-      .table th:nth-child(6),
-      .table td:nth-child(6),
-      .table th:nth-child(7),
-      .table td:nth-child(7),
-      .table th:nth-child(8),
-      .table td:nth-child(8),
-      .table th:nth-child(9),
-      .table td:nth-child(9) {
-        width: auto;
+      .csv-actions {
+        grid-template-columns: 1fr;
+      }
+      
+      .csv-form {
+        flex-direction: column;
       }
     }
 
-    @media (max-width: 480px) {
+    @media (max-width: 768px) {
       .main-content {
         padding: 15px;
       }
       
-      .table-container {
-        padding: 15px;
+      .stats-grid {
+        grid-template-columns: 1fr;
       }
       
-      .edit-form {
-        grid-template-columns: 1fr;
+      .welcome-container {
+        flex-direction: column;
+        text-align: center;
+        gap: 10px;
+      }
+      
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+      }
+      
+      .header-actions {
+        width: 100%;
+        justify-content: space-between;
+      }
+      
+      .action-buttons {
+        flex-direction: column;
+      }
+      
+      .btn-sm {
+        width: 100%;
       }
     }
 
-    @keyframes slideIn {
-      from {
-        opacity: 0;
-        transform: translateY(-20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+    /* Overlay for mobile sidebar */
+    .sidebar-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 999;
+      display: none;
+    }
+
+    .sidebar-overlay.active {
+      display: block;
     }
 
     .hidden {
       display: none !important;
     }
-
-    .debug-info {
-      background: #f8f9fa;
-      border: 1px solid #dee2e6;
-      padding: 10px;
-      margin: 10px 0;
-      border-radius: 5px;
-      font-family: monospace;
-      font-size: 12px;
-    }
   </style>
 </head>
 <body class="light-mode">
-  <div class="container">
-    <!-- Sidebar -->
-    <div class="sidebar">
-      <div class="sidebar-header">
+  <!-- Mobile Sidebar Overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<!-- Sidebar -->
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
         <div class="logo">M</div>
         <div class="sidebar-title">Marcomedia POS</div>
-      </div>
-      <div class="sidebar-menu">
-        <a href="index.php" class="menu-item">
-          <i class="fas fa-chart-line"></i>
-          <span class="menu-text">Dashboard</span>
-        </a>
-        <a href="sales.php" class="menu-item">
-          <i class="fas fa-shopping-cart"></i>
-          <span class="menu-text">Sales Tracking</span>
-        </a>
-        <a href="orders.php" class="menu-item">
-          <i class="fas fa-clipboard-list"></i>
-          <span class="menu-text">Purchase Orders</span>
-        </a>
-        <a href="stock.php" class="menu-item active">
-          <i class="fas fa-boxes"></i>
-          <span class="menu-text">Inventory</span>
-        </a>
-        <a href="physical_orders.php" class="menu-item">
-          <i class="fas fa-store"></i>
-          <span class="menu-text">Physical Orders</span>
-        </a>
-        <a href="appointment.php" class="menu-item">
-          <i class="fas fa-calendar-alt"></i>
-          <span class="menu-text">Appointments</span>
-        </a>
-        <a href="user_management.php" class="menu-item">
-          <i class="fas fa-users"></i>
-          <span class="menu-text">Account Management</span>
-        </a>
-      </div>
-      <div class="sidebar-footer">
-        <form action="logout.php" method="POST">
-          <button type="submit" style="background: var(--danger); color: white; border: none; padding: 10px; width: 100%; border-radius: 6px; cursor: pointer;">
-            <i class="fas fa-sign-out-alt"></i> Logout
-          </button>
-        </form>
-      </div>
     </div>
+    <div class="sidebar-menu">
+        <?php if ($current_role === 'admin'): ?>
+            <!-- Admin sees all menu items -->
+            <a href="index.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) === 'index.php' ? 'active' : ''; ?>">
+                <i class="fas fa-chart-line"></i>
+                <span class="menu-text">Dashboard</span>
+            </a>
+            <a href="sales.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) === 'sales.php' ? 'active' : ''; ?>">
+                <i class="fas fa-shopping-cart"></i>
+                <span class="menu-text">Sales & Orders</span>
+            </a>
+            <a href="stock.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) === 'stock.php' ? 'active' : ''; ?>">
+                <i class="fas fa-boxes"></i>
+                <span class="menu-text">Inventory</span>
+            </a>
+            <a href="physical_orders.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) === 'physical_orders.php' ? 'active' : ''; ?>">
+                <i class="fas fa-store"></i>
+                <span class="menu-text">Physical Orders</span>
+            </a>
+            <a href="appointment.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) === 'appointment.php' ? 'active' : ''; ?>">
+                <i class="fas fa-calendar-alt"></i>
+                <span class="menu-text">Appointments</span>
+            </a>
+            <a href="user_management.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) === 'user_management.php' ? 'active' : ''; ?>">
+                <i class="fas fa-users"></i>
+                <span class="menu-text">Staff Management</span>
+            </a>
+        <?php else: ?>
+            <!-- Photographer sees only appointments -->
+            <a href="appointment.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) === 'appointment.php' ? 'active' : ''; ?>">
+                <i class="fas fa-calendar-alt"></i>
+                <span class="menu-text">Appointments</span>
+            </a>
+        <?php endif; ?>
+    </div>
+    <div class="sidebar-footer">
+        <form action="logout.php" method="POST">
+            <button type="submit" class="logout-btn">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+        </form>
+    </div>
+</div>
 
     <!-- Main Content -->
     <div class="main-content">
@@ -940,22 +1723,131 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
           <p>Manage your product inventory and stock levels</p>
         </div>
         <div class="header-actions">
+          <div class="menu-toggle" id="menuToggle">
+            <i class="fas fa-bars"></i>
+          </div>
           <label class="theme-toggle" for="theme-toggle">
             <i class="fas fa-moon"></i>
           </label>
-          <input type="checkbox" id="theme-toggle" style="display: none;">
-          <div class="user-menu">
-            <i class="fas fa-user"></i>
-          </div>
+        </div>
+      </div>
+
+      <!-- Welcome Section -->
+      <div class="welcome-container">
+        <div class="welcome-avatar"><?php echo strtoupper(substr($username, 0, 1)); ?></div>
+        <div class="welcome-text">
+          <h2><?php echo $greeting; ?>, <?php echo $username; ?>!</h2>
+          <p id="current-date"><?php echo date('l, F j, Y'); ?></p>
         </div>
       </div>
 
       <!-- Flash Message -->
       <?php if(!empty($_SESSION['flash'])): ?>
         <div class="flash-message flash-<?= $_SESSION['flash']['type'] === 'error' ? 'error' : ($_SESSION['flash']['type'] === 'warning' ? 'warning' : 'success') ?>">
+          <i class="fas fa-<?php echo $_SESSION['flash']['type'] === 'error' ? 'exclamation-triangle' : ($_SESSION['flash']['type'] === 'warning' ? 'exclamation-circle' : 'check-circle'); ?>"></i>
           <?= $_SESSION['flash']['message']; unset($_SESSION['flash']); ?>
         </div>
       <?php endif; ?>
+
+      <!-- CSV Operations Card -->
+      <div class="csv-card">
+        <div class="csv-header">
+          <div class="csv-icon">
+            <i class="fas fa-file-csv"></i>
+          </div>
+          <div>
+            <div class="csv-title">Data Management</div>
+            <div class="csv-description">Export, import, and manage your inventory data using CSV files</div>
+          </div>
+        </div>
+        
+        <div class="csv-actions">
+          <!-- Export Card -->
+          <div class="csv-action-item">
+            <div class="action-header">
+              <div class="action-icon export">
+                <i class="fas fa-file-export"></i>
+              </div>
+              <div>
+                <div class="action-title">Export to CSV</div>
+                <div class="action-description">Download your current inventory as a CSV file for backup or analysis</div>
+              </div>
+            </div>
+            <div class="action-buttons">
+              <form method="POST" action="stock.php" class="csv-form">
+                <button type="submit" name="export_csv" class="btn btn-success btn-sm">
+                  <i class="fas fa-download"></i> Export Data
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Import Card -->
+          <div class="csv-action-item">
+            <div class="action-header">
+              <div class="action-icon import">
+                <i class="fas fa-file-import"></i>
+              </div>
+              <div>
+                <div class="action-title">Import from CSV</div>
+                <div class="action-description">Upload a CSV file to add or update products in bulk</div>
+              </div>
+            </div>
+            <div class="action-buttons">
+              <form method="POST" action="stock.php" enctype="multipart/form-data" class="csv-form" id="importForm">
+                <div class="file-upload-wrapper">
+                  <input type="file" name="csv_file" accept=".csv" class="file-upload-input" id="csvFileInput" required>
+                  <label for="csvFileInput" class="file-upload-label">
+                    <i class="fas fa-file-upload"></i> Choose CSV File
+                  </label>
+                  <div class="file-name" id="fileName">No file chosen</div>
+                </div>
+                <button type="submit" name="import_csv" class="import-button" id="importButton">
+                  <i class="fas fa-upload"></i> Import
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Template Card -->
+          <div class="csv-action-item">
+            <div class="action-header">
+              <div class="action-icon template">
+                <i class="fas fa-file-download"></i>
+              </div>
+              <div>
+                <div class="action-title">Download Template</div>
+                <div class="action-description">Get a pre-formatted CSV template to ensure proper import formatting</div>
+              </div>
+            </div>
+            <div class="action-buttons">
+              <form method="POST" action="stock.php" class="csv-form">
+                <button type="submit" name="download_template" class="btn btn-warning btn-sm">
+                  <i class="fas fa-file-code"></i> Get Template
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Help Card -->
+          <div class="csv-action-item">
+            <div class="action-header">
+              <div class="action-icon help">
+                <i class="fas fa-question-circle"></i>
+              </div>
+              <div>
+                <div class="action-title">Import Instructions</div>
+                <div class="action-description">Learn about CSV format requirements and best practices for imports</div>
+              </div>
+            </div>
+            <div class="action-buttons">
+              <button type="button" class="btn btn-primary btn-sm" onclick="showImportInstructions()">
+                <i class="fas fa-info-circle"></i> View Guide
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- Stats Cards -->
       <div class="stats-grid">
@@ -998,7 +1890,9 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
 
       <!-- Add Product Form -->
       <div class="form-container">
-        <h3 style="margin-bottom: 20px; color: var(--text);">Add New Product</h3>
+        <div class="section-header">
+          <div class="section-title">Add New Product</div>
+        </div>
         <form id="productForm" enctype="multipart/form-data" method="POST" onsubmit="return validateForm(this)">
           <div class="form-grid">
             <div class="form-group">
@@ -1078,7 +1972,7 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
                     <?php if (!empty($row['image_path'])): ?>
                       <img src="<?= htmlspecialchars($row['image_path']) ?>" class="product-image" alt="<?= htmlspecialchars($row['name']) ?>">
                     <?php else: ?>
-                      <div style="width:50px;height:50px;background:var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);">
+                      <div style="width:50px;height:50px;background:var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--text-muted);">
                         <i class="fas fa-image"></i>
                       </div>
                     <?php endif; ?>
@@ -1125,7 +2019,7 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
                         <input type="file" name="image" class="form-control" accept="image/*">
                         <?php if (!empty($row['image_path'])): ?>
                           <small style="color: var(--text-muted); margin-top: 5px; display: block;">
-                            Current: <?= htmlspecialchars($row['image_path']) ?>
+                            Current: <?= htmlspecialchars(basename($row['image_path'])) ?>
                           </small>
                         <?php endif; ?>
                       </div>
@@ -1161,47 +2055,129 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
     </div>
   </div>
 
+  <!-- Import Instructions Modal -->
+  <div class="modal" id="importModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">CSV Import Instructions</h3>
+        <button type="button" class="modal-close" onclick="hideImportInstructions()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="instructions">
+          <h4>CSV Format Requirements:</h4>
+          <ul>
+            <li>File must be in CSV (Comma Separated Values) format</li>
+            <li>Required columns: Category, Product Name, Price</li>
+            <li>Optional columns: ID, Quantity, Image Path</li>
+            <li>Price must be a positive number</li>
+            <li>Quantity must be a whole number (default: 0)</li>
+          </ul>
+          
+          <h4>Column Order:</h4>
+          <ol>
+            <li><strong>ID</strong> - Leave empty for new products, include to update existing</li>
+            <li><strong>Category</strong> * - Product category (required)</li>
+            <li><strong>Product Name</strong> * - Name of the product (required)</li>
+            <li><strong>Quantity</strong> - Stock quantity (default: 0)</li>
+            <li><strong>Price</strong> * - Product price (required, must be > 0)</li>
+            <li><strong>Image Path</strong> - Path to product image (optional)</li>
+            <li><strong>Created At</strong> - Auto-filled, leave empty</li>
+          </ol>
+          
+          <p><strong>Tip:</strong> Download the template first to ensure proper formatting!</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" onclick="hideImportInstructions()">Got it!</button>
+      </div>
+    </div>
+  </div>
+
   <script>
-    // Theme Toggle
-    const themeToggle = document.getElementById('theme-toggle');
+    // Mobile sidebar toggle
+    const menuToggle = document.getElementById('menuToggle');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
     
-    function initializeTheme() {
-      const savedTheme = localStorage.getItem('theme');
-      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (menuToggle && sidebar) {
+      menuToggle.addEventListener('click', function() {
+        sidebar.classList.toggle('active');
+        sidebarOverlay.classList.toggle('active');
+      });
       
-      if (savedTheme === 'dark' || (!savedTheme && systemPrefersDark)) {
-        document.body.classList.remove('light-mode');
-        document.body.classList.add('dark-mode');
-        themeToggle.checked = true;
-        updateThemeIcon('moon');
-      } else {
-        document.body.classList.remove('dark-mode');
-        document.body.classList.add('light-mode');
-        themeToggle.checked = false;
-        updateThemeIcon('sun');
-      }
+      sidebarOverlay.addEventListener('click', function() {
+        sidebar.classList.remove('active');
+        sidebarOverlay.classList.remove('active');
+      });
     }
 
-    function updateThemeIcon(mode) {
-      const themeIcon = document.querySelector('.theme-toggle i');
-      if (themeIcon) {
-        themeIcon.className = mode === 'moon' ? 'fas fa-moon' : 'fas fa-sun';
-      }
+    // Enhanced Theme Toggle with Smooth Transitions
+    const themeToggle = document.getElementById('theme-toggle');
+
+    // Apply theme transition to specific elements only (better performance)
+    function applyThemeTransition() {
+      const transitionElements = document.querySelectorAll('body, .stat-card, .form-container, .table-container, .btn, .form-control, .table, .table th, .table td');
+      transitionElements.forEach(el => {
+        el.style.transition = 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
+      });
     }
 
-    themeToggle.addEventListener('change', function() {
-      if (document.body.classList.contains('dark-mode')) {
-        document.body.classList.remove('dark-mode');
-        document.body.classList.add('light-mode');
-        localStorage.setItem('theme', 'light');
-        updateThemeIcon('sun');
-      } else {
-        document.body.classList.remove('light-mode');
-        document.body.classList.add('dark-mode');
-        localStorage.setItem('theme', 'dark');
-        updateThemeIcon('moon');
-      }
+    // Initialize theme on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      applyThemeTransition();
+      
+      // Set initial theme
+      setTimeout(() => {
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark') {
+          document.body.classList.remove('light-mode');
+          document.body.classList.add('dark-mode');
+          if (themeToggle) themeToggle.checked = true;
+        } else {
+          document.body.classList.remove('dark-mode');
+          document.body.classList.add('light-mode');
+          if (themeToggle) themeToggle.checked = false;
+        }
+      }, 100);
+
+      // Update current date and time
+      updateDateTime();
+      setInterval(updateDateTime, 60000); // Update every minute
+
+      // Add import form validation
+      setupImportForm();
     });
+
+    // Update date and time
+    function updateDateTime() {
+      const now = new Date();
+      const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+      const dateString = now.toLocaleDateString('en-US', options);
+      document.getElementById('current-date').textContent = dateString;
+    }
+
+    // Theme toggle event
+    if (themeToggle) {
+      themeToggle.addEventListener('change', function() {
+        // Add loading state
+        document.body.style.pointerEvents = 'none';
+        
+        setTimeout(() => {
+          if (this.checked) {
+            document.body.classList.remove('light-mode');
+            document.body.classList.add('dark-mode');
+            localStorage.setItem('theme', 'dark');
+          } else {
+            document.body.classList.remove('dark-mode');
+            document.body.classList.add('light-mode');
+            localStorage.setItem('theme', 'light');
+          }
+          
+          // Remove loading state
+          document.body.style.pointerEvents = 'auto';
+        }, 200);
+      });
+    }
 
     // Select All Checkboxes
     const selectAll = document.getElementById('selectAll');
@@ -1267,6 +2243,49 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
       return true;
     }
 
+    // Import Form Validation
+    function setupImportForm() {
+      const importForm = document.getElementById('importForm');
+      const csvFileInput = document.getElementById('csvFileInput');
+      const fileName = document.getElementById('fileName');
+      const importButton = document.getElementById('importButton');
+      
+      if (csvFileInput && fileName) {
+        csvFileInput.addEventListener('change', function() {
+          if (this.files.length > 0) {
+            fileName.textContent = this.files[0].name;
+          } else {
+            fileName.textContent = 'No file chosen';
+          }
+        });
+      }
+      
+      if (importForm && csvFileInput && importButton) {
+        importForm.addEventListener('submit', function(e) {
+          if (!csvFileInput.value) {
+            e.preventDefault();
+            alert('Please select a CSV file to import.');
+            return false;
+          }
+          
+          const file = csvFileInput.files[0];
+          const fileName = file.name.toLowerCase();
+          
+          if (!fileName.endsWith('.csv')) {
+            e.preventDefault();
+            alert('Please select a valid CSV file.');
+            return false;
+          }
+          
+          // Show loading state
+          importButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importing...';
+          importButton.disabled = true;
+          
+          return true;
+        });
+      }
+    }
+
     // Search Functionality
     const searchInput = document.getElementById("searchInput");
     if (searchInput) {
@@ -1283,10 +2302,25 @@ debug_log("Page loaded successfully. Products: " . $resAll->num_rows);
       });
     }
 
+    // Import Instructions Modal
+    function showImportInstructions() {
+      document.getElementById('importModal').classList.add('active');
+    }
+
+    function hideImportInstructions() {
+      document.getElementById('importModal').classList.remove('active');
+    }
+
+    // Close modal when clicking outside
+    document.getElementById('importModal').addEventListener('click', function(e) {
+      if (e.target === this) {
+        hideImportInstructions();
+      }
+    });
+
     // Initialize
     document.addEventListener('DOMContentLoaded', function() {
-      initializeTheme();
-      console.log('Page loaded successfully');
+      console.log('Inventory page loaded successfully');
     });
   </script>
 </body>

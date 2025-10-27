@@ -1,6 +1,14 @@
 <?php
+// Use unique session name for admin
+session_name('admin_session');
 session_start();
 require 'db.php';
+
+/* ----------------- SESSION CHECK ----------------- */
+if (!isset($_SESSION['admin_id'])) {
+    header("Location: login.php");
+    exit();
+}
 
 /* ---------------- FLASH MESSAGE HELPER ---------------- */
 function setFlash($msg, $type = 'success') {
@@ -12,24 +20,45 @@ if (isset($_POST['create_physical_order'])) {
     $customer_name = trim($_POST['customer_name']);
     $customer_phone = trim($_POST['customer_phone']);
     $payment_method = $_POST['payment_method'];
-    $created_by = $_SESSION['user_name'] ?? 'Staff';
+    $created_by = $_SESSION['admin_username'] ?? 'Admin'; // Updated to admin session
+
+    // Validate required fields
+    if (empty($customer_name)) {
+        setFlash("Customer name is required", 'error');
+        header("Location: physical_orders.php");
+        exit;
+    }
 
     // Generate shorter order number for physical orders
-    $order_number = 'PO-' . date('YmdHi') . rand(10, 99); // Shorter format
+    $order_number = 'PO-' . date('YmdHi') . rand(10, 99);
 
     // Calculate total from items
     $total_amount = 0;
     $total_quantity = 0;
     $items = [];
 
+    // Validate items
+    if (!isset($_POST['items']) || empty($_POST['items'])) {
+        setFlash("Please add at least one item to the order.", 'error');
+        header("Location: physical_orders.php");
+        exit;
+    }
+
     foreach ($_POST['items'] as $index => $item) {
         if (!empty($item['product']) && !empty($item['quantity']) && $item['quantity'] > 0) {
-            $product = $item['product'];
+            $product = trim($item['product']);
             $quantity = intval($item['quantity']);
+            
+            if ($quantity <= 0) {
+                setFlash("Invalid quantity for product: $product", 'error');
+                header("Location: physical_orders.php");
+                exit;
+            }
+            
             $total_quantity += $quantity;
             
             // Get product price and stock
-            $stmt = $conn->prepare("SELECT id, price, qty FROM stock WHERE name = ?");
+            $stmt = $conn->prepare("SELECT id, name, price, qty FROM stock WHERE name = ? AND qty > 0");
             if ($stmt === false) {
                 setFlash("Database error: " . $conn->error, 'error');
                 header("Location: physical_orders.php");
@@ -37,23 +66,29 @@ if (isset($_POST['create_physical_order'])) {
             }
             $stmt->bind_param("s", $product);
             $stmt->execute();
-            $stmt->bind_result($product_id, $unit_price, $stock_qty);
-            $stmt->fetch();
+            $stmt->bind_result($product_id, $product_name, $unit_price, $stock_qty);
+            
+            if (!$stmt->fetch()) {
+                $stmt->close();
+                setFlash("Product not found or out of stock: $product", 'error');
+                header("Location: physical_orders.php");
+                exit;
+            }
             $stmt->close();
 
-            if ($unit_price && $stock_qty >= $quantity) {
+            if ($stock_qty >= $quantity) {
                 $subtotal = $unit_price * $quantity;
                 $total_amount += $subtotal;
                 
                 $items[] = [
                     'product_id' => $product_id,
-                    'product' => $product,
+                    'product' => $product_name,
                     'quantity' => $quantity,
                     'unit_price' => $unit_price,
                     'subtotal' => $subtotal
                 ];
             } else {
-                setFlash("Insufficient stock for $product or product not found. Available: $stock_qty, Requested: $quantity", 'error');
+                setFlash("Insufficient stock for $product. Available: $stock_qty, Requested: $quantity", 'error');
                 header("Location: physical_orders.php");
                 exit;
             }
@@ -70,18 +105,28 @@ if (isset($_POST['create_physical_order'])) {
     $conn->begin_transaction();
 
     try {
-        // Get the current user's ID from session, or use a default value
-        $user_id = $_SESSION['user_id'] ?? 1; // Default to user ID 1 if not set
-        $role = $_SESSION['user_role'] ?? 'staff';
+        // Get the current admin's ID from session - UPDATED
+        $admin_id = $_SESSION['admin_id'] ?? 1;
+        $role = $_SESSION['admin_role'] ?? 'admin'; // Updated to admin role
         
-        // Create physical order - include user_id and role
-        $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_name, customer_phone, quantity, order_type, payment_method, status, created_by, user_id, role) VALUES (?, ?, ?, ?, 'physical', ?, 'Completed', ?, ?, ?)");
+        // Create physical order - FIXED: Correct number of parameters
+        $stmt = $conn->prepare("INSERT INTO orders (order_number, customer_name, customer_phone, quantity, order_type, payment_method, status, created_by, user_id, role, total_amount) VALUES (?, ?, ?, ?, 'physical', ?, 'Completed', ?, ?, ?, ?)");
         if ($stmt === false) {
             throw new Exception("Failed to prepare order statement: " . $conn->error);
         }
         
-        // Count the parameters: 8 parameters total
-        $stmt->bind_param("sssisiss", $order_number, $customer_name, $customer_phone, $total_quantity, $payment_method, $created_by, $user_id, $role);
+        // FIXED: Correct bind_param with proper number of parameters
+        $stmt->bind_param("sssisisid", 
+            $order_number, 
+            $customer_name, 
+            $customer_phone, 
+            $total_quantity, 
+            $payment_method, 
+            $created_by, 
+            $admin_id, // Updated to admin_id
+            $role, 
+            $total_amount
+        );
         
         if (!$stmt->execute()) {
             throw new Exception("Failed to create order: " . $stmt->error);
@@ -90,27 +135,20 @@ if (isset($_POST['create_physical_order'])) {
         $order_id = $stmt->insert_id;
         $stmt->close();
 
-        // Check if order_items has unit_price and subtotal columns
-        $check_columns = $conn->query("SHOW COLUMNS FROM order_items LIKE 'unit_price'");
-        $has_unit_price = $check_columns->num_rows > 0;
-        
-        // Add order items to order_items table
+        // Add order items - FIXED: Check if 'product' column exists, otherwise use 'product_name'
         foreach ($items as $item) {
-            if ($has_unit_price) {
-                // If table has unit_price and subtotal columns
-                $stmt = $conn->prepare("INSERT INTO order_items (order_id, product_id, quantity, unit_price, subtotal) VALUES (?, ?, ?, ?, ?)");
-                if ($stmt === false) {
-                    throw new Exception("Failed to prepare order_items statement: " . $conn->error);
-                }
-                $stmt->bind_param("iiidd", $order_id, $item['product_id'], $item['quantity'], $item['unit_price'], $item['subtotal']);
-            } else {
-                // If table only has basic columns
-                $stmt = $conn->prepare("INSERT INTO order_items (order_id, product_id, quantity) VALUES (?, ?, ?)");
-                if ($stmt === false) {
-                    throw new Exception("Failed to prepare order_items statement: " . $conn->error);
-                }
-                $stmt->bind_param("iii", $order_id, $item['product_id'], $item['quantity']);
+            // First, check what columns exist in order_items table
+            $check_columns = $conn->query("SHOW COLUMNS FROM order_items LIKE 'product'");
+            $column_name = ($check_columns && $check_columns->num_rows > 0) ? 'product' : 'product_name';
+            
+            if ($check_columns) $check_columns->close();
+            
+            // Insert into order_items - FIXED: Use dynamic column name
+            $stmt = $conn->prepare("INSERT INTO order_items (order_id, product_id, $column_name, quantity, unit_price, subtotal) VALUES (?, ?, ?, ?, ?, ?)");
+            if ($stmt === false) {
+                throw new Exception("Failed to prepare order_items statement: " . $conn->error);
             }
+            $stmt->bind_param("iisidd", $order_id, $item['product_id'], $item['product'], $item['quantity'], $item['unit_price'], $item['subtotal']);
             
             if (!$stmt->execute()) {
                 throw new Exception("Failed to add order item: " . $stmt->error);
@@ -129,47 +167,16 @@ if (isset($_POST['create_physical_order'])) {
             }
             $stmt->close();
 
-            // Add to sales table for reporting
-            $check_column = $conn->query("SHOW COLUMNS FROM sales LIKE 'order_id'");
-            if ($check_column->num_rows > 0) {
-                $stmt = $conn->prepare("INSERT INTO sales (sale_date, product, quantity, total, order_type, order_id, order_number, customer_name, payment_method) VALUES (NOW(), ?, ?, ?, 'physical', ?, ?, ?, ?)");
-                if ($stmt === false) {
-                    throw new Exception("Failed to prepare sales statement: " . $conn->error);
-                }
-                $stmt->bind_param("sidiiss", $item['product'], $item['quantity'], $item['subtotal'], $order_id, $order_number, $customer_name, $payment_method);
-            } else {
-                $check_column = $conn->query("SHOW COLUMNS FROM sales LIKE 'order_number'");
-                if ($check_column->num_rows > 0) {
-                    $stmt = $conn->prepare("INSERT INTO sales (sale_date, product, quantity, total, order_type, order_number, customer_name, payment_method) VALUES (NOW(), ?, ?, ?, 'physical', ?, ?, ?)");
-                    if ($stmt === false) {
-                        throw new Exception("Failed to prepare sales statement: " . $conn->error);
-                    }
-                    $stmt->bind_param("sidisss", $item['product'], $item['quantity'], $item['subtotal'], $order_number, $customer_name, $payment_method);
-                } else {
-                    $stmt = $conn->prepare("INSERT INTO sales (sale_date, product, quantity, total, order_type, customer_name, payment_method) VALUES (NOW(), ?, ?, ?, 'physical', ?, ?)");
-                    if ($stmt === false) {
-                        throw new Exception("Failed to prepare sales statement: " . $conn->error);
-                    }
-                    $stmt->bind_param("sidss", $item['product'], $item['quantity'], $item['subtotal'], $customer_name, $payment_method);
-                }
+            // Add to sales table
+            $stmt = $conn->prepare("INSERT INTO sales (sale_date, product, quantity, total, order_type, order_id, order_number, customer_name, payment_method) VALUES (NOW(), ?, ?, ?, 'physical', ?, ?, ?, ?)");
+            if ($stmt === false) {
+                throw new Exception("Failed to prepare sales statement: " . $conn->error);
             }
+            $stmt->bind_param("sidiiss", $item['product'], $item['quantity'], $item['subtotal'], $order_id, $order_number, $customer_name, $payment_method);
             
             if (!$stmt->execute()) {
-                throw new Exception("Failed to record sale for " . $item['product'] . ": " . $stmt->error);
-            }
-            $stmt->close();
-        }
-
-        // Update summary table if it exists
-        $check_summary = $conn->query("SHOW TABLES LIKE 'summary'");
-        if ($check_summary->num_rows > 0) {
-            $stmt = $conn->prepare("UPDATE summary SET total_sales = total_sales + 1, total_revenue = total_revenue + ? WHERE id = 1");
-            if ($stmt === false) {
-                throw new Exception("Failed to prepare summary statement: " . $conn->error);
-            }
-            $stmt->bind_param("d", $total_amount);
-            if (!$stmt->execute()) {
-                error_log("Warning: Failed to update summary table: " . $stmt->error);
+                // Log error but don't stop execution
+                error_log("Failed to record sale for " . $item['product'] . ": " . $stmt->error);
             }
             $stmt->close();
         }
@@ -197,79 +204,150 @@ if ($result && $result->num_rows > 0) {
 }
 
 /* ---------------- GET PHYSICAL ORDER STATISTICS ---------------- */
+$physical_stats = ['total_orders' => 0, 'pending' => 0, 'completed' => 0, 'total_revenue' => 0];
+
 // Calculate statistics from orders
 $stats_query = "SELECT 
     COUNT(*) as total_orders,
     SUM(CASE WHEN status='Pending' THEN 1 ELSE 0 END) as pending,
-    SUM(CASE WHEN status='Completed' THEN 1 ELSE 0 END) as completed
+    SUM(CASE WHEN status='Completed' THEN 1 ELSE 0 END) as completed,
+    COALESCE(SUM(total_amount), 0) as total_revenue
 FROM orders WHERE order_type = 'physical'";
 
 $stats_result = $conn->query($stats_query);
-$physical_stats = $stats_result ? $stats_result->fetch_assoc() : ['total_orders' => 0, 'pending' => 0, 'completed' => 0];
-
-// Calculate total revenue - check if we have the subtotal column in order_items
-$check_subtotal = $conn->query("SHOW COLUMNS FROM order_items LIKE 'subtotal'");
-if ($check_subtotal->num_rows > 0) {
-    $revenue_query = "SELECT SUM(oi.subtotal) as total_revenue 
-                     FROM order_items oi 
-                     JOIN orders o ON oi.order_id = o.id 
-                     WHERE o.order_type = 'physical'";
-} else {
-    // If no subtotal column, calculate from stock prices
-    $revenue_query = "SELECT SUM(s.price * oi.quantity) as total_revenue 
-                     FROM order_items oi 
-                     JOIN orders o ON oi.order_id = o.id 
-                     JOIN stock s ON oi.product_id = s.id 
-                     WHERE o.order_type = 'physical'";
+if ($stats_result) {
+    $physical_stats = $stats_result->fetch_assoc();
+    if (!$physical_stats) {
+        $physical_stats = ['total_orders' => 0, 'pending' => 0, 'completed' => 0, 'total_revenue' => 0];
+    }
 }
 
-$revenue_result = $conn->query($revenue_query);
-$revenue_data = $revenue_result ? $revenue_result->fetch_assoc() : ['total_revenue' => 0];
-$physical_stats['total_revenue'] = $revenue_data['total_revenue'] ?? 0;
-
-// Get physical orders for display
+/* ---------------- GET PHYSICAL ORDERS FOR DISPLAY ---------------- */
 $orders = [];
-$orders_query = "SELECT o.* FROM orders o WHERE o.order_type = 'physical' ORDER BY o.created_at DESC LIMIT 50";
+// First, check what columns exist in order_items table
+$check_columns = $conn->query("SHOW COLUMNS FROM order_items LIKE 'product'");
+$product_column = ($check_columns && $check_columns->num_rows > 0) ? 'product' : 'product_name';
+if ($check_columns) $check_columns->close();
+
+// FIXED: Use dynamic column name based on what exists in the database
+$orders_query = "SELECT 
+    o.*,
+    COALESCE(SUM(oi.subtotal), 0) as order_total,
+    GROUP_CONCAT(CONCAT(oi.quantity, 'x ', oi.$product_column) SEPARATOR ', ') as items_list
+FROM orders o 
+LEFT JOIN order_items oi ON o.id = oi.order_id 
+WHERE o.order_type = 'physical' 
+GROUP BY o.id 
+ORDER BY o.created_at DESC 
+LIMIT 50";
 
 $orders_result = $conn->query($orders_query);
 if ($orders_result && $orders_result->num_rows > 0) {
     while ($row = $orders_result->fetch_assoc()) {
-        // Get items and calculate total for each order
-        $order_id = $row['id'];
-        
-        // Check if we have subtotal column
-        $check_subtotal = $conn->query("SHOW COLUMNS FROM order_items LIKE 'subtotal'");
-        if ($check_subtotal->num_rows > 0) {
-            $items_query = $conn->query("
-                SELECT oi.quantity, s.name, oi.subtotal
-                FROM order_items oi 
-                JOIN stock s ON oi.product_id = s.id 
-                WHERE oi.order_id = $order_id
-            ");
-        } else {
-            $items_query = $conn->query("
-                SELECT oi.quantity, s.name, (s.price * oi.quantity) as subtotal
-                FROM order_items oi 
-                JOIN stock s ON oi.product_id = s.id 
-                WHERE oi.order_id = $order_id
-            ");
-        }
-        
-        $items_list = [];
-        $order_total = 0;
-        if ($items_query && $items_query->num_rows > 0) {
-            while ($item = $items_query->fetch_assoc()) {
-                $items_list[] = $item['quantity'] . 'x ' . $item['name'];
-                $order_total += $item['subtotal'];
-            }
-            $row['items_list'] = implode(', ', $items_list);
-        } else {
-            $row['items_list'] = "No items recorded";
-        }
-        
-        $row['order_total'] = $order_total;
         $orders[] = $row;
     }
+} else {
+    // If the above query fails, try a simpler approach
+    $orders_query = "SELECT * FROM orders WHERE order_type = 'physical' ORDER BY created_at DESC LIMIT 50";
+    $orders_result = $conn->query($orders_query);
+    if ($orders_result && $orders_result->num_rows > 0) {
+        while ($row = $orders_result->fetch_assoc()) {
+            // Get items separately
+            $order_id = $row['id'];
+            // FIXED: Use dynamic column name
+            $items_query = $conn->query("
+                SELECT oi.quantity, oi.$product_column as product, oi.subtotal 
+                FROM order_items oi 
+                WHERE oi.order_id = $order_id
+            ");
+            
+            $items_list = [];
+            $order_total = 0;
+            if ($items_query && $items_query->num_rows > 0) {
+                while ($item = $items_query->fetch_assoc()) {
+                    $items_list[] = $item['quantity'] . 'x ' . $item['product'];
+                    $order_total += $item['subtotal'];
+                }
+                $row['items_list'] = implode(', ', $items_list);
+            } else {
+                $row['items_list'] = "No items recorded";
+            }
+            
+            $row['order_total'] = $order_total;
+            $orders[] = $row;
+        }
+    }
+}
+
+// Get current time for greeting
+$hour = date('H');
+if ($hour < 12) {
+    $greeting = "Good morning";
+} elseif ($hour < 13) {
+    $greeting = "Good afternoon";
+} else {
+    $greeting = "Good evening";
+}
+
+// Safely get username with fallback - UPDATED TO ADMIN SESSION
+$username = isset($_SESSION['admin_username']) ? $_SESSION['admin_username'] : 'Admin';
+
+/* -------------------- ROLE-BASED ACCESS CONTROL -------------------- */
+
+// Function to check user role and permissions - UPDATED FOR ADMIN SESSION
+function checkAccess($required_role = null) {
+    // Use admin session
+    if (session_name() !== 'admin_session') {
+        session_name('admin_session');
+        session_start();
+    }
+    
+    if (!isset($_SESSION['admin_id'])) {
+        header('Location: login.php');
+        exit;
+    }
+    
+    // Get user role from session or database
+    if (!isset($_SESSION['admin_role'])) {
+        global $conn;
+        $admin_id = $_SESSION['admin_id'];
+        $stmt = $conn->prepare("SELECT role, username FROM users WHERE id = ? AND role = 'admin'");
+        $stmt->bind_param("i", $admin_id);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result->num_rows > 0) {
+            $user_data = $result->fetch_assoc();
+            $_SESSION['admin_role'] = $user_data['role'];
+            $_SESSION['admin_username'] = $user_data['username']; // Ensure username is set
+        } else {
+            header('Location: logout.php');
+            exit;
+        }
+    }
+    
+    // Check if specific role is required
+    if ($required_role && $_SESSION['admin_role'] !== $required_role) {
+        if ($_SESSION['admin_role'] === 'photographer') {
+            header('Location: appointment.php');
+        } else {
+            header('Location: access_denied.php');
+        }
+        exit;
+    }
+    
+    return $_SESSION['admin_role'];
+}
+
+// Check access for current page and get current role
+$current_role = checkAccess();
+
+// Specific page restrictions - add this to each protected page
+$current_page = basename($_SERVER['PHP_SELF']);
+
+if ($current_role === 'photographer' && $current_page !== 'appointment.php' && $current_page !== 'logout.php') {
+    header('Location: appointment.php');
+    exit;
 }
 ?>
 
@@ -278,16 +356,16 @@ if ($orders_result && $orders_result->num_rows > 0) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Process Physical Orders - Marcomedia POS</title>
+  <title>Physical Orders - Marcomedia POS</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
-    /* Your existing CSS styles remain exactly the same */
     :root {
       --primary: #4361ee;
       --primary-dark: #3a56d4;
+      --primary-light: #4cc9f0;
       --secondary: #7209b7;
-      --success: #4cc9f0;
-      --warning: #f72585;
+      --success: #10b981;
+      --warning: #f59e0b;
       --danger: #e63946;
       --info: #4895ef;
       --light: #f8f9fa;
@@ -296,18 +374,21 @@ if ($orders_result && $orders_result->num_rows > 0) {
       --gray-light: #adb5bd;
       --sidebar-width: 260px;
       --header-height: 70px;
-      --card-radius: 12px;
-      --transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      --card-radius: 16px;
+      --transition: all 0.3s ease;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+      --shadow-hover: 0 20px 40px rgba(0, 0, 0, 0.12);
     }
 
     .dark-mode {
-      --bg: #121826;
-      --card-bg: #1e293b;
+      --bg: #0f1419;
+      --card-bg: #1a222d;
       --text: #f1f5f9;
       --text-muted: #94a3b8;
-      --sidebar-bg: #0f172a;
-      --border: #334155;
-      --shadow: rgba(0, 0, 0, 0.3);
+      --sidebar-bg: #0a0f14;
+      --border: #2a3341;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      --shadow-hover: 0 20px 40px rgba(0, 0, 0, 0.3);
     }
 
     .light-mode {
@@ -317,14 +398,13 @@ if ($orders_result && $orders_result->num_rows > 0) {
       --text-muted: #64748b;
       --sidebar-bg: #1e293b;
       --border: #e2e8f0;
-      --shadow: rgba(0, 0, 0, 0.1);
     }
 
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
 
     body {
@@ -332,181 +412,140 @@ if ($orders_result && $orders_result->num_rows > 0) {
       color: var(--text);
       transition: var(--transition);
       line-height: 1.6;
-      min-height: 100vh;
+      overflow-x: hidden;
     }
 
     .container {
       display: flex;
       min-height: 100vh;
-      transition: var(--transition);
     }
 
-    /* Order Form Styles */
-    .order-form-container {
-        background: var(--card-bg);
-        border-radius: var(--card-radius);
-        padding: 24px;
-        box-shadow: 0 4px 12px var(--shadow);
-        margin-bottom: 30px;
-        transition: var(--transition);
-    }
-
-    .form-grid {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
-        margin-bottom: 20px;
-    }
-
-    .form-group {
-        margin-bottom: 15px;
-    }
-
-    .form-label {
-        display: block;
-        margin-bottom: 5px;
-        font-weight: 500;
-        color: var(--text);
-    }
-
-    .form-control {
-        width: 100%;
-        padding: 10px 12px;
-        border-radius: 6px;
-        border: 1px solid var(--border);
-        background: var(--card-bg);
-        color: var(--text);
-        font-size: 14px;
-        transition: var(--transition);
-    }
-
-    .form-control:focus {
-        outline: none;
-        border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
-    }
-
-    .order-items {
-        margin: 20px 0;
-    }
-
-    .item-row {
-        display: grid;
-        grid-template-columns: 2fr 1fr 1fr 1fr auto;
-        gap: 10px;
-        align-items: end;
-        margin-bottom: 15px;
-        padding: 15px;
-        background: rgba(0, 0, 0, 0.02);
-        border-radius: 6px;
-        transition: var(--transition);
-    }
-
-    .dark-mode .item-row {
-        background: rgba(255, 255, 255, 0.02);
-    }
-
-    .item-row:hover {
-        background: rgba(67, 97, 238, 0.05);
-    }
-
-    .payment-badge {
-        padding: 4px 8px;
-        border-radius: 12px;
-        font-size: 11px;
-        background: rgba(67, 97, 238, 0.1);
-        color: var(--primary);
-    }
-
-    .btn-sm {
-        padding: 8px 12px;
-        font-size: 12px;
-    }
-
-    /* Keep all your existing CSS styles... */
+    /* Sidebar Styles */
     .sidebar {
       width: var(--sidebar-width);
-      background: var(--sidebar-bg);
+      background: linear-gradient(180deg, var(--sidebar-bg) 0%, #151f2e 100%);
       color: white;
       height: 100vh;
       position: fixed;
       overflow-y: auto;
       transition: var(--transition);
       z-index: 1000;
-      box-shadow: 2px 0 10px var(--shadow);
+      box-shadow: 4px 0 20px rgba(0, 0, 0, 0.1);
     }
 
     .sidebar-header {
-      padding: 20px;
+      padding: 24px 20px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.1);
       display: flex;
       align-items: center;
       gap: 12px;
-      transition: var(--transition);
+      background: rgba(0, 0, 0, 0.2);
     }
 
     .logo {
-      width: 40px;
-      height: 40px;
-      border-radius: 8px;
-      background: var(--primary);
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: bold;
-      font-size: 18px;
-      transition: var(--transition);
+      font-size: 20px;
+      box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3);
     }
 
     .sidebar-title {
       font-size: 18px;
-      font-weight: 600;
-      transition: var(--transition);
+      font-weight: 700;
+      letter-spacing: 0.5px;
     }
 
     .sidebar-menu {
       padding: 20px 0;
-      transition: var(--transition);
     }
 
     .menu-item {
       display: flex;
       align-items: center;
-      padding: 12px 20px;
+      padding: 14px 20px;
       color: rgba(255, 255, 255, 0.8);
       text-decoration: none;
       transition: var(--transition);
-      gap: 12px;
-      border-left: 4px solid transparent;
+      gap: 14px;
+      margin: 4px 12px;
+      border-radius: 10px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .menu-item:before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+      transition: left 0.5s;
+    }
+
+    .menu-item:hover:before {
+      left: 100%;
     }
 
     .menu-item:hover, .menu-item.active {
       background: rgba(255, 255, 255, 0.1);
       color: white;
-      border-left-color: var(--primary);
-      transform: translateX(4px);
+      transform: translateX(5px);
+    }
+
+    .menu-item.active {
+      background: linear-gradient(90deg, rgba(67, 97, 238, 0.3) 0%, rgba(67, 97, 238, 0.1) 100%);
+      border-left: 4px solid var(--primary);
     }
 
     .menu-item i {
       width: 20px;
       text-align: center;
-      transition: var(--transition);
+      font-size: 18px;
     }
 
     .sidebar-footer {
       padding: 20px;
       border-top: 1px solid rgba(255, 255, 255, 0.1);
       margin-top: auto;
+    }
+
+    .logout-btn {
+      background: linear-gradient(135deg, var(--danger) 0%, #c53030 100%);
+      color: white;
+      border: none;
+      padding: 12px;
+      width: 100%;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
       transition: var(--transition);
+      font-weight: 600;
+      box-shadow: 0 4px 12px rgba(230, 57, 70, 0.3);
+    }
+
+    .logout-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(230, 57, 70, 0.4);
     }
 
     /* Main Content */
     .main-content {
       flex: 1;
       margin-left: var(--sidebar-width);
-      padding: 20px;
+      padding: 25px;
       transition: var(--transition);
-      min-height: 100vh;
+      background: var(--bg);
     }
 
     /* Header */
@@ -514,36 +553,47 @@ if ($orders_result && $orders_result->num_rows > 0) {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0 0 20px 0;
-      border-bottom: 1px solid var(--border);
-      margin-bottom: 25px;
-      transition: var(--transition);
+      padding: 0 0 25px 0;
+      margin-bottom: 30px;
+      position: relative;
+    }
+
+    .header:after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--border), transparent);
     }
 
     .header-title h1 {
-      font-size: 28px;
-      font-weight: 700;
-      margin-bottom: 5px;
-      transition: var(--transition);
+      font-size: 32px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
     }
 
     .header-title p {
       color: var(--text-muted);
       font-size: 16px;
-      transition: var(--transition);
+      font-weight: 500;
     }
 
     .header-actions {
       display: flex;
       align-items: center;
       gap: 15px;
-      transition: var(--transition);
     }
 
-    .theme-toggle, .notification-btn, .user-menu {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
+    .theme-toggle, .notification-btn, .user-menu, .menu-toggle {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -552,29 +602,65 @@ if ($orders_result && $orders_result->num_rows > 0) {
       cursor: pointer;
       transition: var(--transition);
       border: 1px solid var(--border);
-      box-shadow: 0 2px 8px var(--shadow);
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
     }
 
-    .theme-toggle:hover, .notification-btn:hover, .user-menu:hover {
-      background: var(--primary);
+    .theme-toggle:before, .notification-btn:before, .user-menu:before, .menu-toggle:before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(67, 97, 238, 0.1), transparent);
+      transition: left 0.5s;
+    }
+
+    .theme-toggle:hover:before, .notification-btn:hover:before, .user-menu:hover:before, .menu-toggle:hover:before {
+      left: 100%;
+    }
+
+    .theme-toggle:hover, .notification-btn:hover, .user-menu:hover, .menu-toggle:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-hover);
+    }
+
+    .notification-badge {
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      background: linear-gradient(135deg, var(--danger) 0%, #c53030 100%);
       color: white;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px var(--shadow);
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      box-shadow: 0 2px 8px rgba(230, 57, 70, 0.4);
+    }
+
+    .notification-wrapper {
+      position: relative;
     }
 
     /* Stats Cards */
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 20px;
-      margin-bottom: 30px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 24px;
+      margin-bottom: 40px;
     }
 
     .stat-card {
       background: var(--card-bg);
       border-radius: var(--card-radius);
-      padding: 24px;
-      box-shadow: 0 4px 12px var(--shadow);
+      padding: 28px;
+      box-shadow: var(--shadow);
       transition: var(--transition);
       border-left: 4px solid var(--primary);
       cursor: pointer;
@@ -582,103 +668,367 @@ if ($orders_result && $orders_result->num_rows > 0) {
       overflow: hidden;
     }
 
-    .stat-card::before {
+    .stat-card:before {
       content: '';
       position: absolute;
       top: 0;
-      left: -100%;
+      left: 0;
       width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
-      transition: var(--transition);
+      height: 4px;
+      background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.5s ease;
     }
 
-    .stat-card:hover::before {
-      left: 100%;
+    .stat-card:hover:before {
+      transform: scaleX(1);
     }
 
     .stat-card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 10px 25px var(--shadow);
+      transform: translateY(-8px);
+      box-shadow: var(--shadow-hover);
     }
 
     .stat-card.warning {
       border-left-color: var(--warning);
     }
 
+    .stat-card.warning:before {
+      background: linear-gradient(90deg, var(--warning) 0%, #fbbf24 100%);
+    }
+
     .stat-card.danger {
       border-left-color: var(--danger);
+    }
+
+    .stat-card.danger:before {
+      background: linear-gradient(90deg, var(--danger) 0%, #c53030 100%);
     }
 
     .stat-card.success {
       border-left-color: var(--success);
     }
 
+    .stat-card.success:before {
+      background: linear-gradient(90deg, var(--success) 0%, #34d399 100%);
+    }
+
     .stat-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      margin-bottom: 15px;
-      transition: var(--transition);
+      align-items: flex-start;
+      margin-bottom: 20px;
     }
 
     .stat-icon {
-      width: 50px;
-      height: 50px;
-      border-radius: 10px;
+      width: 60px;
+      height: 60px;
+      border-radius: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
-      background: rgba(67, 97, 238, 0.1);
+      font-size: 26px;
+      background: linear-gradient(135deg, rgba(67, 97, 238, 0.1) 0%, rgba(67, 97, 238, 0.05) 100%);
       color: var(--primary);
-      transition: var(--transition);
+      box-shadow: 0 4px 12px rgba(67, 97, 238, 0.15);
     }
 
     .stat-card.warning .stat-icon {
-      background: rgba(247, 37, 133, 0.1);
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);
       color: var(--warning);
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.15);
     }
 
     .stat-card.danger .stat-icon {
-      background: rgba(230, 57, 70, 0.1);
+      background: linear-gradient(135deg, rgba(230, 57, 70, 0.1) 0%, rgba(230, 57, 70, 0.05) 100%);
       color: var(--danger);
+      box-shadow: 0 4px 12px rgba(230, 57, 70, 0.15);
     }
 
     .stat-card.success .stat-icon {
-      background: rgba(76, 201, 240, 0.1);
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%);
       color: var(--success);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
     }
 
     .stat-value {
-      font-size: 28px;
-      font-weight: 700;
-      margin-bottom: 5px;
-      transition: var(--transition);
+      font-size: 32px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      background: linear-gradient(90deg, var(--text) 0%, var(--text-muted) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
 
     .stat-label {
       color: var(--text-muted);
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    /* Order Form Styles */
+    .order-form-container {
+      background: var(--card-bg);
+      border-radius: var(--card-radius);
+      padding: 28px;
+      box-shadow: var(--shadow);
+      margin-bottom: 40px;
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .order-form-container:before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.5s ease;
+    }
+
+    .order-form-container:hover:before {
+      transform: scaleX(1);
+    }
+
+    .order-form-container:hover {
+      box-shadow: var(--shadow-hover);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: var(--text);
       font-size: 14px;
       transition: var(--transition);
+      box-shadow: 0 2px 6px var(--shadow);
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
+    }
+
+    .order-items {
+      margin: 25px 0;
+    }
+
+    .item-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr auto;
+      gap: 15px;
+      align-items: end;
+      margin-bottom: 15px;
+      padding: 20px;
+      background: rgba(0, 0, 0, 0.02);
+      border-radius: 12px;
+      transition: var(--transition);
+      border: 1px solid var(--border);
+    }
+
+    .dark-mode .item-row {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .item-row:hover {
+      background: rgba(67, 97, 238, 0.05);
+      transform: translateY(-2px);
+    }
+
+    .payment-badge {
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      background: rgba(67, 97, 238, 0.1);
+      color: var(--primary);
+      border: 1px solid rgba(67, 97, 238, 0.2);
+    }
+
+    .btn {
+      padding: 12px 20px;
+      border-radius: 10px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: var(--shadow);
+      font-size: 14px;
+    }
+
+    .btn:hover {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-hover);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, var(--danger) 0%, #c53030 100%);
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: linear-gradient(135deg, #c53030 0%, var(--danger) 100%);
+    }
+
+    .btn-success {
+      background: linear-gradient(135deg, var(--success) 0%, #34d399 100%);
+      color: white;
+    }
+
+    .btn-success:hover {
+      background: linear-gradient(135deg, #34d399 0%, var(--success) 100%);
+    }
+
+    .btn-warning {
+      background: linear-gradient(135deg, var(--warning) 0%, #fbbf24 100%);
+      color: white;
+    }
+
+    .btn-warning:hover {
+      background: linear-gradient(135deg, #fbbf24 0%, var(--warning) 100%);
+    }
+
+    .btn-sm {
+      padding: 10px 16px;
+      font-size: 13px;
+    }
+
+    .btn-lg {
+      padding: 16px 28px;
+      font-size: 16px;
+    }
+
+    .total-display {
+        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 12px;
+        text-align: center;
+        font-size: 20px;
+        font-weight: 700;
+        margin-top: 25px;
+        box-shadow: var(--shadow);
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+    }
+
+    .section-title {
+        font-size: 20px;
+        font-weight: 700;
+        position: relative;
+        padding-left: 12px;
+    }
+
+    .section-title:before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        height: 100%;
+        width: 4px;
+        background: linear-gradient(180deg, var(--primary) 0%, var(--primary-light) 100%);
+        border-radius: 4px;
+    }
+
+    .stock-info {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 5px;
+        font-weight: 500;
+    }
+
+    .out-of-stock {
+        color: var(--danger);
+    }
+
+    .low-stock {
+        color: var(--warning);
     }
 
     /* Orders Table */
     .orders-table-container {
       background: var(--card-bg);
       border-radius: var(--card-radius);
-      padding: 24px;
-      box-shadow: 0 4px 12px var(--shadow);
-      margin-bottom: 30px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+      margin-bottom: 40px;
       transition: var(--transition);
-      overflow-x: auto;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .orders-table-container:before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%);
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform 0.5s ease;
+    }
+
+    .orders-table-container:hover:before {
+      transform: scaleX(1);
+    }
+
+    .orders-table-container:hover {
+      box-shadow: var(--shadow-hover);
     }
 
     .table-actions {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 20px;
+      margin-bottom: 24px;
       transition: var(--transition);
     }
 
@@ -690,89 +1040,29 @@ if ($orders_result && $orders_result->num_rows > 0) {
 
     .search-box input {
       width: 100%;
-      padding: 10px 15px 10px 40px;
-      border-radius: 8px;
+      padding: 12px 16px 12px 42px;
+      border-radius: 10px;
       border: 1px solid var(--border);
       background: var(--card-bg);
       color: var(--text);
       font-size: 14px;
       transition: var(--transition);
-      box-shadow: 0 2px 6px var(--shadow);
+      box-shadow: var(--shadow);
     }
 
     .search-box input:focus {
       outline: none;
       border-color: var(--primary);
-      box-shadow: 0 2px 8px rgba(67, 97, 238, 0.2);
+      box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.1);
     }
 
     .search-box i {
       position: absolute;
-      left: 15px;
+      left: 16px;
       top: 50%;
       transform: translateY(-50%);
       color: var(--text-muted);
       transition: var(--transition);
-    }
-
-    .action-buttons {
-      display: flex;
-      gap: 10px;
-      transition: var(--transition);
-    }
-
-    .btn {
-      padding: 10px 16px;
-      border-radius: 8px;
-      border: none;
-      font-weight: 500;
-      cursor: pointer;
-      transition: var(--transition);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      box-shadow: 0 2px 6px var(--shadow);
-    }
-
-    .btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px var(--shadow);
-    }
-
-    .btn-primary {
-      background: var(--primary);
-      color: white;
-    }
-
-    .btn-primary:hover {
-      background: var(--primary-dark);
-    }
-
-    .btn-danger {
-      background: var(--danger);
-      color: white;
-    }
-
-    .btn-danger:hover {
-      background: #c53030;
-    }
-
-    .btn-success {
-      background: var(--success);
-      color: white;
-    }
-
-    .btn-success:hover {
-      background: #3aa8d8;
-    }
-
-    .btn-warning {
-      background: var(--warning);
-      color: white;
-    }
-
-    .btn-warning:hover {
-      background: #d61a6e;
     }
 
     .orders-table {
@@ -783,7 +1073,7 @@ if ($orders_result && $orders_result->num_rows > 0) {
     }
 
     .orders-table th, .orders-table td {
-      padding: 14px 16px;
+      padding: 16px;
       text-align: left;
       border-bottom: 1px solid var(--border);
       transition: var(--transition);
@@ -791,10 +1081,11 @@ if ($orders_result && $orders_result->num_rows > 0) {
 
     .orders-table th {
       color: var(--text-muted);
-      font-weight: 500;
+      font-weight: 600;
       font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
       background: rgba(0, 0, 0, 0.02);
-      transition: var(--transition);
     }
 
     .dark-mode .orders-table th {
@@ -806,108 +1097,45 @@ if ($orders_result && $orders_result->num_rows > 0) {
     }
 
     .orders-table tr:hover {
-      background: rgba(0, 0, 0, 0.02);
-    }
-
-    .dark-mode .orders-table tr:hover {
-      background: rgba(255, 255, 255, 0.02);
-    }
-
-    .checkbox-cell {
-      width: 40px;
-      text-align: center;
-      transition: var(--transition);
+      background: rgba(67, 97, 238, 0.03);
     }
 
     .status-badge {
       padding: 6px 12px;
       border-radius: 20px;
       font-size: 12px;
-      font-weight: 500;
-      transition: var(--transition);
+      font-weight: 600;
+      letter-spacing: 0.3px;
     }
 
     .status-pending {
       background: rgba(245, 158, 11, 0.1);
-      color: #f59e0b;
-    }
-
-    .status-confirmed {
-      background: rgba(16, 185, 129, 0.1);
-      color: #10b981;
-    }
-
-    .status-received {
-      background: rgba(59, 130, 246, 0.1);
-      color: #3b82f6;
-    }
-
-    .status-cancelled {
-      background: rgba(239, 68, 68, 0.1);
-      color: #ef4444;
+      color: var(--warning);
+      border: 1px solid rgba(245, 158, 11, 0.2);
     }
 
     .status-completed {
       background: rgba(16, 185, 129, 0.1);
-      color: #10b981;
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.2);
     }
 
-    .action-cell {
-      display: flex;
-      gap: 8px;
-      transition: var(--transition);
-    }
-
-    .action-btn {
-      padding: 6px 12px;
-      border-radius: 6px;
-      border: none;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: var(--transition);
-      box-shadow: 0 2px 4px var(--shadow);
-    }
-
-    .action-btn:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 8px var(--shadow);
-    }
-
-    .action-btn.success {
-      background: var(--success);
-      color: white;
-    }
-
-    .action-btn.success:hover {
-      background: #3aa8d8;
-    }
-
-    .action-btn.danger {
-      background: var(--danger);
-      color: white;
-    }
-
-    .action-btn.danger:hover {
-      background: #c53030;
-    }
-
-    .action-btn:disabled {
-      background: var(--gray-light);
-      cursor: not-allowed;
-      transform: none;
-      box-shadow: none;
+    .status-processing {
+      background: rgba(67, 97, 238, 0.1);
+      color: var(--primary);
+      border: 1px solid rgba(67, 97, 238, 0.2);
     }
 
     /* Flash Message */
     .flash-message {
-      padding: 12px 20px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      font-weight: 500;
+      padding: 16px 20px;
+      border-radius: 12px;
+      margin-bottom: 30px;
+      font-weight: 600;
       transition: var(--transition);
       animation: slideIn 0.5s ease-out;
-      box-shadow: 0 4px 12px var(--shadow);
+      box-shadow: var(--shadow);
+      border-left: 4px solid;
     }
 
     @keyframes slideIn {
@@ -923,78 +1151,66 @@ if ($orders_result && $orders_result->num_rows > 0) {
 
     .flash-success {
       background: rgba(16, 185, 129, 0.1);
-      color: #10b981;
-      border-left: 4px solid #10b981;
+      color: var(--success);
+      border-left-color: var(--success);
     }
 
     .flash-error {
       background: rgba(239, 68, 68, 0.1);
-      color: #ef4444;
-      border-left: 4px solid #ef4444;
+      color: var(--danger);
+      border-left-color: var(--danger);
     }
 
     /* Footer */
     .footer {
       text-align: center;
-      padding: 20px;
+      padding: 24px;
       color: var(--text-muted);
       font-size: 14px;
       border-top: 1px solid var(--border);
-      margin-top: 30px;
-      transition: var(--transition);
+      margin-top: 40px;
+      font-weight: 500;
     }
 
-    /* Responsive */
-    @media (max-width: 768px) {
-      .sidebar {
-        width: 70px;
-        overflow: visible;
-      }
-      .sidebar-title, .menu-text {
-        display: none;
-      }
-      .main-content {
-        margin-left: 70px;
-      }
-      .sidebar-header {
-        justify-content: center;
-        padding: 20px 10px;
-      }
-      .menu-item {
-        justify-content: center;
-        padding: 15px;
-      }
-      .table-actions {
-        flex-direction: column;
-        gap: 15px;
-        align-items: flex-start;
-      }
-      .search-box {
-        width: 100%;
-      }
-      .action-buttons {
-        width: 100%;
-        justify-content: space-between;
-      }
-      .orders-table {
-        display: block;
-        overflow-x: auto;
-      }
-      .form-grid {
-        grid-template-columns: 1fr;
-      }
-      .item-row {
-        grid-template-columns: 1fr;
-        gap: 10px;
-      }
+    /* Welcome Section */
+    .welcome-container {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 30px;
+    }
+
+    .welcome-avatar {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 24px;
+      font-weight: 700;
+      box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3);
+    }
+
+    .welcome-text h2 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .welcome-text p {
+      color: var(--text-muted);
+      font-size: 15px;
     }
 
     /* Toggle Switch */
     .toggle-switch {
       position: relative;
       display: inline-block;
-      width: 50px;
-      height: 24px;
+      width: 54px;
+      height: 28px;
     }
 
     .toggle-switch input {
@@ -1010,106 +1226,231 @@ if ($orders_result && $orders_result->num_rows > 0) {
       left: 0;
       right: 0;
       bottom: 0;
-      background-color: var(--gray-light);
-      transition: var(--transition);
-      border-radius: 24px;
+      background: linear-gradient(135deg, var(--gray-light) 0%, var(--gray) 100%);
+      transition: .4s;
+      border-radius: 28px;
     }
 
     .slider:before {
       position: absolute;
       content: "";
-      height: 16px;
-      width: 16px;
+      height: 20px;
+      width: 20px;
       left: 4px;
       bottom: 4px;
       background-color: white;
-      transition: var(--transition);
+      transition: .4s;
       border-radius: 50%;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
     }
 
     input:checked + .slider {
-      background-color: var(--primary);
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
     }
 
     input:checked + .slider:before {
       transform: translateX(26px);
     }
 
-    .total-display {
-        background: var(--primary);
-        color: white;
-        padding: 15px 20px;
-        border-radius: 8px;
+    /* Mobile Responsive */
+    .menu-toggle {
+      display: none;
+    }
+
+    @media (max-width: 992px) {
+      .sidebar {
+        transform: translateX(-100%);
+        width: 280px;
+      }
+      
+      .sidebar.active {
+        transform: translateX(0);
+      }
+      
+      .main-content {
+        margin-left: 0;
+        padding: 20px;
+      }
+      
+      .menu-toggle {
+        display: flex;
+      }
+      
+      .stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+      }
+      
+      .stat-card {
+        padding: 20px;
+      }
+      
+      .stat-value {
+        font-size: 24px;
+      }
+      
+      .header-title h1 {
+        font-size: 26px;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .item-row {
+        grid-template-columns: 1fr;
+        gap: 15px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .main-content {
+        padding: 15px;
+      }
+      
+      .stats-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .welcome-container {
+        flex-direction: column;
         text-align: center;
-        font-size: 18px;
-        font-weight: 600;
-        margin-top: 20px;
+        gap: 10px;
+      }
+      
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 15px;
+      }
+      
+      .header-actions {
+        width: 100%;
+        justify-content: space-between;
+      }
+      
+      .orders-table-container {
+        overflow-x: auto;
+      }
+      
+      .table-actions {
+        flex-direction: column;
+        gap: 15px;
+        align-items: flex-start;
+      }
+      
+      .search-box {
+        width: 100%;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .order-form-container, .orders-table-container {
+        padding: 18px;
+      }
+      
+      .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+      }
+    }
+
+    /* Overlay for mobile sidebar */
+    .sidebar-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 999;
+      display: none;
+    }
+
+    .sidebar-overlay.active {
+      display: block;
     }
   </style>
 </head>
-<body>
-  <div class="container">
-    <!-- Sidebar -->
-    <div class="sidebar">
-      <div class="sidebar-header">
+<body class="light-mode">
+  <!-- Mobile Sidebar Overlay -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<!-- Sidebar -->
+<div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
         <div class="logo">M</div>
         <div class="sidebar-title">Marcomedia POS</div>
-      </div>
-      <div class="sidebar-menu">
-        <a href="index.php" class="menu-item">
-          <i class="fas fa-chart-line"></i>
-          <span class="menu-text">Dashboard</span>
-        </a>
-        <a href="sales.php" class="menu-item">
-          <i class="fas fa-shopping-cart"></i>
-          <span class="menu-text">Sales Tracking</span>
-        </a>
-        <a href="orders.php" class="menu-item">
-          <i class="fas fa-clipboard-list"></i>
-          <span class="menu-text">Purchase Orders</span>
-        </a>
-        <a href="stock.php" class="menu-item">
-          <i class="fas fa-boxes"></i>
-          <span class="menu-text">Inventory</span>
-        </a>
-        <a href="physical_orders.php" class="menu-item active">
-          <i class="fas fa-store"></i>
-          <span class="menu-text">Physical Orders</span>
-        </a>
-        <a href="appointment.php" class="menu-item">
-          <i class="fas fa-calendar-alt"></i>
-          <span class="menu-text">Appointments</span>
-        </a>
-        <a href="user_management.php" class="menu-item">
-          <i class="fas fa-users"></i>
-          <span class="menu-text">Account Management</span>
-        </a>
-      </div>
-      <div class="sidebar-footer">
-        <form action="logout.php" method="POST">
-          <button type="submit" style="background: var(--danger); color: white; border: none; padding: 10px; width: 100%; border-radius: 6px; cursor: pointer;">
-            <i class="fas fa-sign-out-alt"></i> Logout
-          </button>
-        </form>
-      </div>
     </div>
+    <div class="sidebar-menu">
+        <?php if ($current_role === 'admin'): ?>
+            <!-- Admin sees all menu items -->
+            <a href="index.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) === 'index.php' ? 'active' : ''; ?>">
+                <i class="fas fa-chart-line"></i>
+                <span class="menu-text">Dashboard</span>
+            </a>
+            <a href="sales.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) === 'sales.php' ? 'active' : ''; ?>">
+                <i class="fas fa-shopping-cart"></i>
+                <span class="menu-text">Sales & Orders</span>
+            </a>
+            <a href="stock.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) === 'stock.php' ? 'active' : ''; ?>">
+                <i class="fas fa-boxes"></i>
+                <span class="menu-text">Inventory</span>
+            </a>
+            <a href="physical_orders.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) === 'physical_orders.php' ? 'active' : ''; ?>">
+                <i class="fas fa-store"></i>
+                <span class="menu-text">Physical Orders</span>
+            </a>
+            <a href="appointment.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) === 'appointment.php' ? 'active' : ''; ?>">
+                <i class="fas fa-calendar-alt"></i>
+                <span class="menu-text">Appointments</span>
+            </a>
+            <a href="user_management.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) === 'user_management.php' ? 'active' : ''; ?>">
+                <i class="fas fa-users"></i>
+                <span class="menu-text">Staff Management</span>
+            </a>
+        <?php else: ?>
+            <!-- Photographer sees only appointments -->
+            <a href="appointment.php" class="menu-item <?php echo basename($_SERVER['PHP_SELF']) === 'appointment.php' ? 'active' : ''; ?>">
+                <i class="fas fa-calendar-alt"></i>
+                <span class="menu-text">Appointments</span>
+            </a>
+        <?php endif; ?>
+    </div>
+    <div class="sidebar-footer">
+        <form action="logout.php" method="POST">
+            <button type="submit" class="logout-btn">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+        </form>
+    </div>
+</div>
 
     <!-- Main Content -->
     <div class="main-content">
       <!-- Header -->
       <div class="header">
         <div class="header-title">
-          <h1>Process Physical Orders</h1>
+          <h1>Physical Orders</h1>
           <p>Create and manage walk-in customer orders</p>
         </div>
         <div class="header-actions">
+          <div class="menu-toggle" id="menuToggle">
+            <i class="fas fa-bars"></i>
+          </div>
           <label class="theme-toggle" for="theme-toggle">
             <i class="fas fa-moon"></i>
           </label>
-          <input type="checkbox" id="theme-toggle" style="display: none;">
-          <div class="user-menu">
-            <i class="fas fa-user"></i>
-          </div>
+        </div>
+      </div>
+
+      <!-- Welcome Section -->
+      <div class="welcome-container">
+        <div class="welcome-avatar"><?php echo strtoupper(substr($username, 0, 1)); ?></div>
+        <div class="welcome-text">
+          <h2><?php echo $greeting; ?>, <?php echo $username; ?>!</h2>
+          <p id="current-date"><?php echo date('l, F j, Y'); ?></p>
         </div>
       </div>
 
@@ -1181,21 +1522,21 @@ if ($orders_result && $orders_result->num_rows > 0) {
           <div class="form-grid">
             <div class="form-group">
               <label class="form-label">Customer Name *</label>
-              <input type="text" name="customer_name" class="form-control" placeholder="Enter customer name" required>
+              <input type="text" name="customer_name" class="form-control" placeholder="Enter customer name" required value="<?php echo isset($_POST['customer_name']) ? htmlspecialchars($_POST['customer_name']) : ''; ?>">
             </div>
 
             <div class="form-group">
               <label class="form-label">Phone Number</label>
-              <input type="tel" name="customer_phone" class="form-control" placeholder="Enter phone number">
+              <input type="tel" name="customer_phone" class="form-control" placeholder="Enter phone number" value="<?php echo isset($_POST['customer_phone']) ? htmlspecialchars($_POST['customer_phone']) : ''; ?>">
             </div>
 
             <div class="form-group">
               <label class="form-label">Payment Method *</label>
               <select name="payment_method" class="form-control" required>
-                <option value="cash">Cash</option>
-                <option value="card">Credit/Debit Card</option>
-                <option value="gcash">GCash</option>
-                <option value="bank_transfer">Bank Transfer</option>
+                <option value="cash" <?php echo (isset($_POST['payment_method']) && $_POST['payment_method'] == 'cash') ? 'selected' : ''; ?>>Cash</option>
+                <option value="card" <?php echo (isset($_POST['payment_method']) && $_POST['payment_method'] == 'card') ? 'selected' : ''; ?>>Credit/Debit Card</option>
+                <option value="gcash" <?php echo (isset($_POST['payment_method']) && $_POST['payment_method'] == 'gcash') ? 'selected' : ''; ?>>GCash</option>
+                <option value="bank_transfer" <?php echo (isset($_POST['payment_method']) && $_POST['payment_method'] == 'bank_transfer') ? 'selected' : ''; ?>>Bank Transfer</option>
               </select>
             </div>
           </div>
@@ -1260,9 +1601,10 @@ if ($orders_result && $orders_result->num_rows > 0) {
                   <td><?= htmlspecialchars($order['customer_name']); ?></td>
                   <td><?= $order['customer_phone'] ?: 'N/A'; ?></td>
                   <td><span class="payment-badge"><?= ucfirst($order['payment_method']); ?></span></td>
-                  <td>
+                  <td title="<?= htmlspecialchars($order['items_list']); ?>">
                     <?php
-                    echo htmlspecialchars($order['items_list']);
+                    $items = $order['items_list'];
+                    echo strlen($items) > 50 ? htmlspecialchars(substr($items, 0, 50)) . '...' : htmlspecialchars($items);
                     ?>
                   </td>
                   <td><strong>₱<?= number_format($order['order_total'], 2); ?></strong></td>
@@ -1276,8 +1618,10 @@ if ($orders_result && $orders_result->num_rows > 0) {
               <?php endforeach; ?>
             <?php else: ?>
               <tr>
-                <td colspan="8" style="text-align: center;">
+                <td colspan="8" style="text-align: center; padding: 40px;">
+                  <i class="fas fa-shopping-bag" style="font-size: 48px; color: var(--text-muted); margin-bottom: 15px; display: block;"></i>
                   No physical orders found.
+                  <p style="color: var(--text-muted); margin-top: 10px;">Create your first physical order using the form above.</p>
                 </td>
               </tr>
             <?php endif; ?>
@@ -1309,12 +1653,17 @@ function addItemRow() {
             <label class="form-label">Product *</label>
             <select name="items[${itemCount}][product]" class="form-control product-select" onchange="updatePrice(this, ${itemCount})" required>
                 <option value="">Select Product</option>
-                ${products.map(p => `<option value="${p.name}" data-price="${p.price}" data-stock="${p.qty}">${p.name} - ₱${p.price} (Stock: ${p.qty})</option>`).join('')}
+                ${products.map(p => {
+                  const stockStatus = p.qty <= 0 ? ' (Out of Stock)' : p.qty <= 5 ? ' (Low Stock)' : '';
+                  const disabled = p.qty <= 0 ? 'disabled' : '';
+                  return `<option value="${p.name}" data-price="${p.price}" data-stock="${p.qty}" ${disabled}>${p.name} - ₱${p.price} (Stock: ${p.qty}${stockStatus})</option>`;
+                }).join('')}
             </select>
+            <div class="stock-info" id="stockInfo${itemCount}"></div>
         </div>
         <div class="form-group">
             <label class="form-label">Quantity *</label>
-            <input type="number" name="items[${itemCount}][quantity]" class="form-control quantity-input" min="1" max="1000" value="1" onchange="updateSubtotal(${itemCount})" oninput="updateSubtotal(${itemCount})" required>
+            <input type="number" name="items[${itemCount}][quantity]" class="form-control quantity-input" min="1" value="1" onchange="updateSubtotal(${itemCount})" oninput="updateSubtotal(${itemCount})" required>
         </div>
         <div class="form-group">
             <label class="form-label">Unit Price</label>
@@ -1325,7 +1674,7 @@ function addItemRow() {
             <input type="text" class="form-control subtotal-display" readonly value="₱0.00">
         </div>
         <div class="form-group">
-            <button type="button" class="btn btn-danger btn-sm" onclick="removeItemRow(this)" ${itemCount === 1 ? 'disabled' : ''}>
+            <button type="button" class="btn btn-danger btn-sm" onclick="removeItemRow(this)">
                 <i class="fas fa-trash"></i>
             </button>
         </div>
@@ -1333,39 +1682,67 @@ function addItemRow() {
     
     container.appendChild(itemRow);
     updateTotal();
+    
+    // Enable delete button if there are multiple rows
+    const deleteButtons = document.querySelectorAll('.btn-danger');
+    deleteButtons.forEach(btn => {
+        btn.disabled = deleteButtons.length <= 1;
+    });
 }
 
 function removeItemRow(button) {
-    if (document.querySelectorAll('.item-row').length > 1) {
+    const rows = document.querySelectorAll('.item-row');
+    if (rows.length > 1) {
         button.closest('.item-row').remove();
         updateTotal();
+        
+        // Update delete buttons state
+        const deleteButtons = document.querySelectorAll('.btn-danger');
+        deleteButtons.forEach(btn => {
+            btn.disabled = deleteButtons.length <= 1;
+        });
     }
 }
 
 function updatePrice(select, index) {
     const selectedOption = select.selectedOptions[0];
     const price = selectedOption?.dataset.price || 0;
-    const stock = selectedOption?.dataset.stock || 0;
+    const stock = parseInt(selectedOption?.dataset.stock) || 0;
     
     const row = select.closest('.item-row');
     const quantityInput = row.querySelector('.quantity-input');
+    const stockInfo = document.getElementById(`stockInfo${index}`);
     
-    // Update max quantity based on stock
-    quantityInput.max = stock;
+    // Update stock info
+    if (stock <= 0) {
+        stockInfo.innerHTML = '<span class="out-of-stock">Out of Stock</span>';
+        quantityInput.disabled = true;
+        quantityInput.value = 0;
+    } else if (stock <= 5) {
+        stockInfo.innerHTML = `<span class="low-stock">Low Stock - Only ${stock} available</span>`;
+        quantityInput.disabled = false;
+        quantityInput.max = stock;
+    } else {
+        stockInfo.innerHTML = `<span>In Stock - ${stock} available</span>`;
+        quantityInput.disabled = false;
+        quantityInput.max = stock;
+    }
     
     // Update price display
     row.querySelector('.price-display').value = `₱${parseFloat(price).toFixed(2)}`;
     
     // Update quantity if it exceeds stock
-    if (parseInt(quantityInput.value) > parseInt(stock)) {
-        quantityInput.value = stock;
+    if (parseInt(quantityInput.value) > stock) {
+        quantityInput.value = stock > 0 ? 1 : 0;
     }
     
     updateSubtotal(index);
 }
 
 function updateSubtotal(index) {
-    const row = document.querySelector(`[name="items[${index}][quantity]"]`).closest('.item-row');
+    const row = document.querySelector(`[name="items[${index}][quantity]"]`)?.closest('.item-row');
+    if (!row) return;
+    
     const quantity = parseInt(row.querySelector('.quantity-input').value) || 0;
     const priceText = row.querySelector('.price-display').value;
     const price = parseFloat(priceText.replace('₱', '')) || 0;
@@ -1389,14 +1766,33 @@ function updateTotal() {
 document.addEventListener('DOMContentLoaded', function() {
     addItemRow();
     
+    // Mobile sidebar functionality
+    const menuToggle = document.getElementById('menuToggle');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    
+    if (menuToggle && sidebar) {
+      menuToggle.addEventListener('click', function() {
+        sidebar.classList.toggle('active');
+        sidebarOverlay.classList.toggle('active');
+      });
+      
+      sidebarOverlay.addEventListener('click', function() {
+        sidebar.classList.remove('active');
+        sidebarOverlay.classList.remove('active');
+      });
+    }
+    
     // Theme toggle functionality
     const themeToggle = document.getElementById('theme-toggle');
     const savedTheme = localStorage.getItem('theme');
     
     if (savedTheme === 'dark') {
+        document.body.classList.remove('light-mode');
         document.body.classList.add('dark-mode');
         themeToggle.checked = true;
     } else {
+        document.body.classList.remove('dark-mode');
         document.body.classList.add('light-mode');
     }
     
@@ -1411,24 +1807,67 @@ document.addEventListener('DOMContentLoaded', function() {
             localStorage.setItem('theme', 'light');
         }
     });
+    
+    // Search functionality
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const rows = document.querySelectorAll('.orders-table tbody tr');
+            
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(searchTerm) ? '' : 'none';
+            });
+        });
+    }
+
+    // Update current date and time
+    updateDateTime();
+    setInterval(updateDateTime, 60000); // Update every minute
 });
+
+// Update date and time
+function updateDateTime() {
+  const now = new Date();
+  const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+  const dateString = now.toLocaleDateString('en-US', options);
+  document.getElementById('current-date').textContent = dateString;
+}
 
 // Form validation
 document.getElementById('orderForm').addEventListener('submit', function(e) {
     let hasValidItems = false;
+    let errorMessages = [];
     
+    // Check customer name
+    const customerName = document.querySelector('[name="customer_name"]').value.trim();
+    if (!customerName) {
+        errorMessages.push('Customer name is required');
+    }
+    
+    // Check items
     document.querySelectorAll('.item-row').forEach(row => {
         const product = row.querySelector('.product-select').value;
-        const quantity = row.querySelector('.quantity-input').value;
+        const quantity = parseInt(row.querySelector('.quantity-input').value) || 0;
+        const stock = parseInt(row.querySelector('.product-select').selectedOptions[0]?.dataset.stock) || 0;
         
         if (product && quantity > 0) {
             hasValidItems = true;
+            
+            if (quantity > stock) {
+                errorMessages.push(`Quantity for ${product} exceeds available stock (${stock})`);
+            }
         }
     });
     
     if (!hasValidItems) {
+        errorMessages.push('Please add at least one valid item to the order.');
+    }
+    
+    if (errorMessages.length > 0) {
         e.preventDefault();
-        alert('Please add at least one item to the order.');
+        alert('Please fix the following errors:\n\n' + errorMessages.join('\n'));
         return;
     }
 });

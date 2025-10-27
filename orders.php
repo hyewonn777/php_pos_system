@@ -309,15 +309,6 @@ if ($orders_query && $orders_query->num_rows > 0) {
     error_log("No orders found or query failed");
 }
 
-// Get current time for greeting
-$hour = date('H');
-if ($hour < 12) {
-    $greeting = "Good morning";
-} elseif ($hour < 18) {
-    $greeting = "Good afternoon";
-} else {
-    $greeting = "Good evening";
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">

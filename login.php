@@ -1,35 +1,71 @@
 ﻿<?php
-session_start();
+// Use a unique session name for admin
+if (session_status() === PHP_SESSION_NONE) {
+    session_name('admin_session');
+    session_start();
+}
 require 'db.php';
 
+$error = '';
+$username = '';
+$password = '';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = trim($_POST['username']);
-    $password = trim($_POST['password']);
+    // Check if username and password exist in POST array before accessing them
+    $username = isset($_POST['username']) ? trim($_POST['username']) : '';
+    $password = isset($_POST['password']) ? trim($_POST['password']) : '';
 
-    $stmt = $conn->prepare("SELECT * FROM users WHERE username = ? LIMIT 1");
-    $stmt->bind_param("s", $username);
-    $stmt->execute();
-    $user = $stmt->get_result()->fetch_assoc();
-
-    if ($user && hash('sha256', $password) === $user['password_hash']) {
-        $_SESSION['user_id'] = $user['id'];
-        $_SESSION['username'] = $user['username'];
-        $_SESSION['role'] = $user['role'];
-        header("Location: index.php");
-        exit();
+    // Validate that both fields are not empty
+    if (empty($username) || empty($password)) {
+        $error = "❌ Please enter both username and password!";
     } else {
-        $error = "❌ Invalid username or password!";
+        // Allow both admin and photographer roles to log in
+        $stmt = $conn->prepare("SELECT * FROM users WHERE username = ? AND (role = 'admin' OR role = 'photographer') LIMIT 1");
+        $stmt->bind_param("s", $username);
+        $stmt->execute();
+        $user = $stmt->get_result()->fetch_assoc();
+
+        if ($user && hash('sha256', $password) === $user['password_hash']) {
+            // Set session variables based on role
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['username'] = $user['username'];
+            $_SESSION['role'] = $user['role'];
+            
+            // Set admin-specific session variables if user is admin
+            if ($user['role'] === 'admin') {
+                $_SESSION['admin_id'] = $user['id'];
+                $_SESSION['admin_username'] = $user['username'];
+                $_SESSION['admin_role'] = $user['role'];
+                $_SESSION['is_admin'] = true;
+                
+                // Debug log
+                error_log("Admin login successful - User ID: {$_SESSION['user_id']}, Role: {$_SESSION['role']}");
+                
+                header("Location: index.php");
+                exit();
+            } 
+            // Redirect photographers to appointment.php
+            else if ($user['role'] === 'photographer') {
+                $_SESSION['is_photographer'] = true;
+                
+                // Debug log
+                error_log("Photographer login successful - User ID: {$_SESSION['user_id']}, Role: {$_SESSION['role']}");
+                
+                header("Location: appointment.php");
+                exit();
+            }
+        } else {
+            $error = "❌ Invalid username or password!";
+        }
     }
 }
-
 ?>
-
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Admin Login</title>
+  <title>Staff Login</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
@@ -245,11 +281,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <img src="images/rsz_logo.png" alt="Logo">
     </div>
       <p>The best place to get customized! with 
-      secure admin access — manage products, sales, appointments and users. This panel supports role-based access (coming soon).</p>
+      secure staff access — manage products, sales, appointments and users. This panel supports role-based access for admins and photographers.</p>
     </div>
 
     <div class="login-box" role="main" aria-labelledby="loginTitle">
-      <h2 id="loginTitle">Admin Login</h2>
+      <h2 id="loginTitle">Staff Login</h2>
 
       <?php if (!empty($error)) echo "<div class='error'>$error</div>"; ?>
 
@@ -257,7 +293,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="form-row">
           <label for="username">Username</label>
           <div class="input-wrap">
-            <input id="username" name="username" type="text" placeholder="Enter your username" required autofocus>
+            <input id="username" name="username" type="text" placeholder="Enter your username" required autofocus value="<?php echo htmlspecialchars($username); ?>">
           </div>
         </div>
 
@@ -282,8 +318,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <script>
     // small enhancement: focus username on load
     document.getElementById('username')?.focus();
-
-
   </script>
 </body>
 </html>

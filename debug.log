@@ -138,3 +138,378 @@
 2025-10-10 19:59:23 - Page loaded successfully. Products: 68
 2025-10-10 19:59:33 - Page loaded successfully. Products: 68
 2025-10-10 19:59:54 - Page loaded successfully. Products: 68
+2025-10-11 08:21:14 - Page loaded successfully. Products: 68
+2025-10-11 08:22:13 - POST Request: Array
+(
+    [edit_id] => 703
+    [category] => Drinkware
+    [name] => Magic Mug
+    [qty] => 5
+    [price] => 300.00
+    [update_product] => 
+)
+
+2025-10-11 08:22:13 - FILES Data: Array
+(
+    [image] => Array
+        (
+            [name] => 
+            [type] => 
+            [tmp_name] => 
+            [error] => 4
+            [size] => 0
+        )
+
+)
+
+2025-10-11 08:22:13 - Update product triggered
+2025-10-11 08:22:13 - Updating product ID: 703, Category: Drinkware, Name: Magic Mug, Qty: 5, Price: 300
+2025-10-11 08:22:13 - Product update successful
+2025-10-11 08:22:13 - Page loaded successfully. Products: 68
+2025-10-12 07:29:55 - Page loaded successfully. Products: 68
+2025-10-12 10:31:11 - Page loaded successfully. Products: 68
+2025-10-12 10:42:12 - Page loaded successfully. Products: 68
+2025-10-12 10:52:55 - Page loaded successfully. Products: 68
+2025-10-12 10:53:08 - Page loaded successfully. Products: 68
+2025-10-12 10:53:10 - Page loaded successfully. Products: 68
+2025-10-12 11:07:36 - Page loaded successfully. Products: 68
+2025-10-12 11:07:45 - POST Request: Array
+(
+    [edit_id] => 703
+    [category] => Drinkware
+    [name] => Magic Mug
+    [qty] => 100
+    [price] => 300.00
+    [update_product] => 
+)
+
+2025-10-12 11:07:45 - FILES Data: Array
+(
+    [image] => Array
+        (
+            [name] => 
+            [type] => 
+            [tmp_name] => 
+            [error] => 4
+            [size] => 0
+        )
+
+)
+
+2025-10-12 11:07:45 - Update product triggered
+2025-10-12 11:07:45 - Updating product ID: 703, Category: Drinkware, Name: Magic Mug, Qty: 100, Price: 300
+2025-10-12 11:07:45 - Product update successful
+2025-10-12 11:07:45 - Page loaded successfully. Products: 68
+2025-10-12 11:07:52 - Page loaded successfully. Products: 68
+2025-10-12 11:34:39 - Page loaded successfully. Products: 68
+2025-10-12 12:20:33 - Page loaded successfully. Products: 68
+2025-10-12 12:20:37 - Page loaded successfully. Products: 68
+2025-10-12 12:22:19 - Page loaded successfully. Products: 68
+2025-10-12 13:31:59 - Page loaded successfully. Products: 68
+2025-10-12 13:32:02 - Page loaded successfully. Products: 68
+2025-10-12 13:34:52 - Page loaded successfully. Products: 68
+2025-10-12 13:37:09 - Page loaded successfully. Products: 68
+2025-10-12 13:38:32 - Page loaded successfully. Products: 68
+2025-10-12 13:38:35 - Page loaded successfully. Products: 68
+2025-10-12 13:40:01 - Page loaded successfully. Products: 68
+2025-10-12 13:40:10 - Page loaded successfully. Products: 68
+2025-10-12 13:41:58 - Page loaded successfully. Products: 68
+2025-10-12 13:42:40 - Page loaded successfully. Products: 68
+2025-10-12 13:42:42 - Page loaded successfully. Products: 68
+2025-10-12 13:46:49 - Page loaded successfully. Products: 68
+2025-10-12 13:47:26 - Page loaded successfully. Products: 68
+2025-10-12 13:47:59 - Page loaded successfully. Products: 68
+2025-10-12 13:48:14 - Page loaded successfully. Products: 68
+2025-10-12 13:48:27 - Page loaded successfully. Products: 68
+2025-10-12 13:49:24 - Page loaded successfully. Products: 68
+2025-10-12 14:24:38 - Page loaded successfully. Products: 68
+2025-10-12 14:24:49 - Page loaded successfully. Products: 68
+2025-10-12 15:17:18 - Page loaded successfully. Products: 68
+2025-10-12 15:17:22 - Page loaded successfully. Products: 68
+2025-10-12 18:41:00 - Page loaded successfully. Products: 68
+2025-10-12 20:26:04 - Page loaded successfully. Products: 68
+2025-10-13 03:04:42 - Page loaded successfully. Products: 68
+2025-10-13 03:27:54 - Page loaded successfully. Products: 68
+2025-10-13 03:28:01 - Page loaded successfully. Products: 68
+2025-10-13 09:43:30 - Page loaded successfully. Products: 68
+2025-10-13 09:43:39 - POST Request: Array
+(
+    [edit_id] => 733
+    [category] => Apparel
+    [name] => Apron
+    [qty] => 100
+    [price] => 150.00
+    [update_product] => 
+)
+
+2025-10-13 09:43:39 - FILES Data: Array
+(
+    [image] => Array
+        (
+            [name] => 81NC+V+pmLL._AC_SL1500_.jpg
+            [type] => image/jpeg
+            [tmp_name] => C:\xampp\tmp\php903E.tmp
+            [error] => 0
+            [size] => 121121
+        )
+
+)
+
+2025-10-13 09:43:39 - Update product triggered
+2025-10-13 09:43:39 - Updating product ID: 733, Category: Apparel, Name: Apron, Qty: 100, Price: 150
+2025-10-13 09:43:39 - Image upload detected
+2025-10-13 09:43:39 - Image uploaded successfully: uploads/1760341419_81NC_V_pmLL._AC_SL1500_.jpg
+2025-10-13 09:43:39 - Product update successful
+2025-10-13 09:43:40 - Page loaded successfully. Products: 68
+2025-10-13 09:44:10 - POST Request: Array
+(
+    [edit_id] => 703
+    [category] => Drinkware
+    [name] => Magic Mug
+    [qty] => 100
+    [price] => 300.00
+    [update_product] => 
+)
+
+2025-10-13 09:44:10 - FILES Data: Array
+(
+    [image] => Array
+        (
+            [name] => 61NwujclU4L._UF894,1000_QL80_.jpg
+            [type] => image/jpeg
+            [tmp_name] => C:\xampp\tmp\php63A.tmp
+            [error] => 0
+            [size] => 61385
+        )
+
+)
+
+2025-10-13 09:44:10 - Update product triggered
+2025-10-13 09:44:10 - Updating product ID: 703, Category: Drinkware, Name: Magic Mug, Qty: 100, Price: 300
+2025-10-13 09:44:10 - Image upload detected
+2025-10-13 09:44:10 - Image uploaded successfully: uploads/1760341450_61NwujclU4L._UF894_1000_QL80_.jpg
+2025-10-13 09:44:10 - Product update successful
+2025-10-13 09:44:10 - Page loaded successfully. Products: 68
+2025-10-13 09:45:10 - Page loaded successfully. Products: 68
+2025-10-13 09:46:10 - POST Request: Array
+(
+    [edit_id] => 704
+    [category] => Drinkware
+    [name] => Frosted Mug
+    [qty] => 98
+    [price] => 200.00
+    [update_product] => 
+)
+
+2025-10-13 09:46:10 - FILES Data: Array
+(
+    [image] => Array
+        (
+            [name] => Frpsted-Mug-2.jpg
+            [type] => image/jpeg
+            [tmp_name] => C:\xampp\tmp\phpDCEF.tmp
+            [error] => 0
+            [size] => 214579
+        )
+
+)
+
+2025-10-13 09:46:10 - Update product triggered
+2025-10-13 09:46:10 - Updating product ID: 704, Category: Drinkware, Name: Frosted Mug, Qty: 98, Price: 200
+2025-10-13 09:46:10 - Image upload detected
+2025-10-13 09:46:10 - Image uploaded successfully: uploads/1760341570_Frpsted-Mug-2.jpg
+2025-10-13 09:46:10 - Product update successful
+2025-10-13 09:46:10 - Page loaded successfully. Products: 68
+2025-10-13 09:52:59 - Page loaded successfully. Products: 68
+2025-10-13 11:50:48 - Page loaded successfully. Products: 68
+2025-10-13 11:51:03 - Page loaded successfully. Products: 68
+2025-10-13 11:51:04 - Page loaded successfully. Products: 68
+2025-10-13 11:51:05 - Page loaded successfully. Products: 68
+2025-10-13 11:51:09 - Page loaded successfully. Products: 68
+2025-10-13 11:53:00 - Page loaded successfully. Products: 68
+2025-10-13 11:55:20 - Page loaded successfully. Products: 68
+2025-10-13 12:11:35 - Page loaded successfully. Products: 68
+2025-10-13 12:22:53 - Page loaded successfully. Products: 68
+2025-10-13 12:23:06 - Page loaded successfully. Products: 68
+2025-10-13 12:23:07 - Page loaded successfully. Products: 68
+2025-10-13 12:23:14 - Page loaded successfully. Products: 68
+2025-10-13 12:27:42 - Page loaded successfully. Products: 68
+2025-10-13 12:30:42 - Page loaded successfully. Products: 68
+2025-10-13 12:43:03 - Page loaded successfully. Products: 68
+2025-10-13 15:19:36 - Page loaded successfully. Products: 68
+2025-10-14 00:49:52 - Page loaded successfully. Products: 68
+2025-10-16 11:38:39 - Page loaded successfully. Products: 68
+2025-10-16 11:39:41 - Page loaded successfully. Products: 68
+2025-10-16 11:40:11 - Page loaded successfully. Products: 68
+2025-10-16 11:40:59 - Page loaded successfully. Products: 68
+2025-10-16 11:52:40 - Page loaded successfully. Products: 68
+2025-10-16 11:52:45 - Page loaded successfully. Products: 68
+2025-10-16 15:01:06 - Page loaded successfully. Products: 68
+2025-10-18 22:03:16 - Page loaded successfully. Products: 68
+2025-10-18 22:03:37 - Page loaded successfully. Products: 68
+2025-10-19 05:31:46 - Page loaded successfully. Products: 68
+2025-10-19 12:45:50 - Page loaded successfully. Products: 68
+2025-10-19 12:45:59 - Page loaded successfully. Products: 68
+2025-10-19 16:48:27 - Page loaded successfully. Products: 68
+2025-10-19 16:48:51 - Page loaded successfully. Products: 68
+2025-10-19 16:51:50 - Page loaded successfully. Products: 68
+2025-10-19 16:52:05 - Page loaded successfully. Products: 68
+2025-10-19 16:52:11 - POST Request: Array
+(
+    [edit_id] => 703
+    [category] => Drinkware
+    [name] => Magic Mug
+    [qty] => 99
+    [price] => 300.00
+    [update_product] => 
+)
+
+2025-10-19 16:52:11 - FILES Data: Array
+(
+    [image] => Array
+        (
+            [name] => 
+            [type] => 
+            [tmp_name] => 
+            [error] => 4
+            [size] => 0
+        )
+
+)
+
+2025-10-19 16:52:11 - Update product triggered
+2025-10-19 16:52:11 - Updating product ID: 703, Category: Drinkware, Name: Magic Mug, Qty: 99, Price: 300
+2025-10-19 16:52:11 - Product update successful
+2025-10-19 16:52:11 - Page loaded successfully. Products: 68
+2025-10-19 17:46:47 - Page loaded successfully. Products: 68
+2025-10-19 18:24:12 - Page loaded successfully. Products: 68
+2025-10-19 18:24:32 - Page loaded successfully. Products: 68
+2025-10-20 03:29:36 - Page loaded successfully. Products: 68
+2025-10-20 17:48:04 - Page loaded successfully. Products: 68
+2025-10-21 01:53:34 - Page loaded successfully. Products: 68
+2025-10-21 01:53:41 - Page loaded successfully. Products: 68
+2025-10-21 01:53:42 - Page loaded successfully. Products: 68
+2025-10-21 01:53:43 - Page loaded successfully. Products: 68
+2025-10-21 01:53:44 - Page loaded successfully. Products: 68
+2025-10-21 01:53:45 - Page loaded successfully. Products: 68
+2025-10-21 01:53:46 - Page loaded successfully. Products: 68
+2025-10-21 01:53:47 - Page loaded successfully. Products: 68
+2025-10-21 01:53:48 - Page loaded successfully. Products: 68
+2025-10-21 02:06:55 - Page loaded successfully. Products: 68
+2025-10-21 02:32:56 - Page loaded successfully. Products: 68
+2025-10-21 02:33:07 - Page loaded successfully. Products: 68
+2025-10-21 03:20:59 - Page loaded successfully. Products: 68
+2025-10-21 03:44:51 - Page loaded successfully. Products: 68
+2025-10-21 03:44:52 - Page loaded successfully. Products: 68
+2025-10-21 03:44:53 - Page loaded successfully. Products: 68
+2025-10-21 03:57:50 - Page loaded successfully. Products: 68
+2025-10-21 04:24:47 - Page loaded successfully. Products: 68
+2025-10-21 04:33:30 - Page loaded successfully. Products: 68
+2025-10-21 04:36:13 - Page loaded successfully. Products: 68
+2025-10-25 04:24:16 - Page loaded successfully. Products: 68
+2025-10-25 04:25:43 - Page loaded successfully. Products: 68
+2025-10-25 04:25:51 - Page loaded successfully. Products: 68
+2025-10-25 04:28:26 - Page loaded successfully. Products: 68
+2025-10-25 04:34:08 - Page loaded successfully. Products: 68
+2025-10-25 04:34:31 - Page loaded successfully. Products: 68
+2025-10-25 04:51:38 - Page loaded successfully. Products: 68
+2025-10-25 04:51:44 - Page loaded successfully. Products: 68
+2025-10-25 04:52:03 - POST Request: Array
+(
+    [edit_id] => 769
+    [category] => Printing & Stationery
+    [name] => Calling Card
+    [qty] => 1
+    [price] => 30.00
+    [update_product] => 
+)
+
+2025-10-25 04:52:03 - FILES Data: Array
+(
+    [image] => Array
+        (
+            [name] => 
+            [type] => 
+            [tmp_name] => 
+            [error] => 4
+            [size] => 0
+        )
+
+)
+
+2025-10-25 04:52:03 - Update product triggered
+2025-10-25 04:52:03 - Updating product ID: 769, Category: Printing & Stationery, Name: Calling Card, Qty: 1, Price: 30
+2025-10-25 04:52:03 - Product update successful
+2025-10-25 04:52:03 - Page loaded successfully. Products: 68
+2025-10-25 04:52:19 - POST Request: Array
+(
+    [edit_id] => 769
+    [category] => Printing & Stationery
+    [name] => Calling Card
+    [qty] => 100
+    [price] => 30.00
+    [update_product] => 
+)
+
+2025-10-25 04:52:19 - FILES Data: Array
+(
+    [image] => Array
+        (
+            [name] => 
+            [type] => 
+            [tmp_name] => 
+            [error] => 4
+            [size] => 0
+        )
+
+)
+
+2025-10-25 04:52:19 - Update product triggered
+2025-10-25 04:52:19 - Updating product ID: 769, Category: Printing & Stationery, Name: Calling Card, Qty: 100, Price: 30
+2025-10-25 04:52:19 - Product update successful
+2025-10-25 04:52:19 - Page loaded successfully. Products: 68
+2025-10-25 05:52:54 - Page loaded successfully. Products: 68
+2025-10-25 05:53:56 - Page loaded successfully. Products: 68
+2025-10-25 05:54:24 - Page loaded successfully. Products: 68
+2025-10-25 07:25:53 - Page loaded successfully. Products: 68
+2025-10-25 07:26:25 - Page loaded successfully. Products: 68
+2025-10-25 07:26:31 - Page loaded successfully. Products: 68
+2025-10-26 02:25:24 - Page loaded successfully. Products: 68
+2025-10-26 02:35:28 - Page loaded successfully. Products: 68
+2025-10-26 02:35:38 - POST Request: Array
+(
+    [download_template] => 
+)
+
+2025-10-26 02:35:38 - CSV Template download triggered
+2025-10-26 02:35:38 - CSV template downloaded successfully
+2025-10-26 02:36:02 - POST Request: Array
+(
+    [edit_id] => 703
+    [category] => Drinkware
+    [name] => Magic Mug
+    [qty] => 98
+    [price] => 300.00
+    [update_product] => 
+)
+
+2025-10-26 02:36:02 - FILES Data: Array
+(
+    [image] => Array
+        (
+            [name] => 
+            [type] => 
+            [tmp_name] => 
+            [error] => 4
+            [size] => 0
+        )
+
+)
+
+2025-10-26 02:36:02 - Update product triggered
+2025-10-26 02:36:02 - Updating product ID: 703, Category: Drinkware, Name: Magic Mug, Qty: 98, Price: 300
+2025-10-26 02:36:02 - Product update successful
+2025-10-26 02:36:02 - Page loaded successfully. Products: 68
+2025-10-26 02:42:09 - Page loaded successfully. Products: 68
+2025-10-26 02:04:00 - Page loaded successfully. Products: 68
+2025-10-27 00:55:45 - Page loaded successfully. Products: 68
