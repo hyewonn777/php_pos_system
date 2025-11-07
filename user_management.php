@@ -84,13 +84,14 @@ if (isset($_POST['add_user'])) {
                 if ($check_stmt->num_rows > 0) {
                     $error = "Username already exists!";
                 } else {
-                    // Insert new user
+                    // Insert new user - SET STATUS TO 'active' BY DEFAULT
                     $password_hash = hash('sha256', $password_raw);
-                    $insert_sql = "INSERT INTO users (fullname, username, password_hash, role, created_at) VALUES (?, ?, ?, ?, NOW())";
+                    $status = 'active'; // Always set new users to active
+                    $insert_sql = "INSERT INTO users (fullname, username, password_hash, role, status, created_at) VALUES (?, ?, ?, ?, ?, NOW())";
                     $insert_stmt = $conn->prepare($insert_sql);
                     
                     if ($insert_stmt) {
-                        $insert_stmt->bind_param("ssss", $fullname, $username, $password_hash, $role);
+                        $insert_stmt->bind_param("sssss", $fullname, $username, $password_hash, $role, $status);
                         
                         if ($insert_stmt->execute()) {
                             $success = "✅ Staff member '$fullname' has been added successfully as $role!";
@@ -123,6 +124,7 @@ if (isset($_POST['update_user'])) {
         $username = trim($_POST['username'] ?? '');
         $role = trim($_POST['role'] ?? '');
         $password_raw = trim($_POST['password'] ?? '');
+        $status = trim($_POST['status'] ?? 'active'); // Default to active if not provided
 
         if ($id <= 0 || empty($fullname) || empty($username) || empty($role)) {
             $error = "Please fill all required fields.";
@@ -146,17 +148,17 @@ if (isset($_POST['update_user'])) {
                             $error = "Password must be at least 4 characters long.";
                         } else {
                             $password_hash = hash('sha256', $password_raw);
-                            $update_sql = "UPDATE users SET fullname=?, username=?, password_hash=?, role=? WHERE id=?";
+                            $update_sql = "UPDATE users SET fullname=?, username=?, password_hash=?, role=?, status=? WHERE id=?";
                             $update_stmt = $conn->prepare($update_sql);
                             if ($update_stmt) {
-                                $update_stmt->bind_param("ssssi", $fullname, $username, $password_hash, $role, $id);
+                                $update_stmt->bind_param("sssssi", $fullname, $username, $password_hash, $role, $status, $id);
                             }
                         }
                     } else {
-                        $update_sql = "UPDATE users SET fullname=?, username=?, role=? WHERE id=?";
+                        $update_sql = "UPDATE users SET fullname=?, username=?, role=?, status=? WHERE id=?";
                         $update_stmt = $conn->prepare($update_sql);
                         if ($update_stmt) {
-                            $update_stmt->bind_param("sssi", $fullname, $username, $role, $id);
+                            $update_stmt->bind_param("ssssi", $fullname, $username, $role, $status, $id);
                         }
                     }
 
@@ -181,6 +183,107 @@ if (isset($_POST['update_user'])) {
             }
         }
     }
+}
+
+/* TOGGLE USER STATUS */
+if (isset($_POST['toggle_status'])) {
+    // Double-check admin privilege
+    if ($_SESSION['role'] !== 'admin') {
+        $error = "Access denied. Admin privileges required to toggle user status.";
+    } else {
+        $id = intval($_POST['id'] ?? 0);
+        $current_status = trim($_POST['current_status'] ?? 'active');
+        
+        if ($id <= 0) {
+            $error = "Invalid user ID.";
+        } else {
+            // Prevent admin from disabling their own account
+            if ($id == $_SESSION['user_id']) {
+                $error = "❌ You cannot disable your own account!";
+            } else {
+                $new_status = ($current_status === 'active') ? 'inactive' : 'active'; // Toggle status
+                
+                // Get user info for confirmation message
+                $user_info_sql = "SELECT fullname, role FROM users WHERE id = ?";
+                $user_info_stmt = $conn->prepare($user_info_sql);
+                
+                if ($user_info_stmt) {
+                    $user_info_stmt->bind_param("i", $id);
+                    $user_info_stmt->execute();
+                    $user_info_result = $user_info_stmt->get_result();
+                    
+                    if ($user_info_result->num_rows > 0) {
+                        $user_data = $user_info_result->fetch_assoc();
+                        $user_fullname = $user_data['fullname'];
+                        $user_role = $user_data['role'];
+                        
+                        // Prevent disabling the last active admin
+                        if ($user_role === 'admin' && $new_status === 'inactive') {
+                            $admin_count_sql = "SELECT COUNT(*) as active_admin_count FROM users WHERE role='admin' AND status='active' AND id != ?";
+                            $admin_count_stmt = $conn->prepare($admin_count_sql);
+                            $admin_count_stmt->bind_param("i", $id);
+                            $admin_count_stmt->execute();
+                            $admin_count_result = $admin_count_stmt->get_result();
+                            
+                            if ($admin_count_result) {
+                                $admin_data = $admin_count_result->fetch_assoc();
+                                $active_admin_count = $admin_data['active_admin_count'];
+                                
+                                if ($active_admin_count < 1) {
+                                    $error = "❌ Cannot disable the last active Admin account!";
+                                    $user_info_stmt->close();
+                                    $admin_count_stmt->close();
+                                    // Redirect to avoid further execution
+                                    header('Location: ' . $_SERVER['PHP_SELF']);
+                                    exit;
+                                } else {
+                                    // Proceed with status update
+                                    updateUserStatus($conn, $id, $new_status, $user_fullname);
+                                }
+                            } else {
+                                $error = "Error checking admin accounts: " . $conn->error;
+                            }
+                            if (isset($admin_count_stmt)) $admin_count_stmt->close();
+                        } else {
+                            // Proceed with status update for non-admin users
+                            updateUserStatus($conn, $id, $new_status, $user_fullname);
+                        }
+                    } else {
+                        $error = "User not found.";
+                    }
+                    $user_info_stmt->close();
+                } else {
+                    $error = "Database error: " . $conn->error;
+                }
+            }
+        }
+    }
+}
+
+// Helper function to update user status
+function updateUserStatus($conn, $id, $new_status, $user_fullname) {
+    $update_sql = "UPDATE users SET status = ? WHERE id = ?";
+    $update_stmt = $conn->prepare($update_sql);
+    
+    if ($update_stmt) {
+        $update_stmt->bind_param("si", $new_status, $id);
+        if ($update_stmt->execute()) {
+            $action = $new_status === 'active' ? 'enabled' : 'disabled';
+            $_SESSION['success'] = "✅ Staff member '$user_fullname' has been $action successfully!";
+            
+            // Log the action
+            logAdminAction($conn, $_SESSION['user_id'], "TOGGLE_STATUS_$action", $user_fullname);
+        } else {
+            $_SESSION['error'] = "Error updating user status: " . $update_stmt->error;
+        }
+        $update_stmt->close();
+    } else {
+        $_SESSION['error'] = "Database error: " . $conn->error;
+    }
+    
+    // Redirect to refresh the page and show the message
+    header('Location: ' . $_SERVER['PHP_SELF']);
+    exit;
 }
 
 /* DELETE USER */
@@ -276,6 +379,7 @@ if (isset($_POST['delete_user'])) {
 $users = [];
 $admins = [];
 $photographers = [];
+$activeUsers = 0;
 
 // Only fetch users if admin
 if ($_SESSION['role'] === 'admin') {
@@ -291,6 +395,9 @@ if ($_SESSION['role'] === 'admin') {
             } elseif ($user['role'] === 'photographer') {
                 $photographers[] = $user;
             }
+            if ($user['status'] === 'active') {
+                $activeUsers++;
+            }
         }
     } else {
         $error = "Could not load users: " . $conn->error;
@@ -301,6 +408,7 @@ if ($_SESSION['role'] === 'admin') {
 $totalUsers = count($users);
 $totalAdmins = count($admins);
 $totalPhotographers = count($photographers);
+$inactiveUsers = $totalUsers - $activeUsers;
 
 // Get current time for greeting
 $hour = date('H');
@@ -337,6 +445,16 @@ function logAdminAction($conn, $admin_id, $action, $target_user = null) {
 // Log page access
 if ($_SESSION['role'] === 'admin') {
     logAdminAction($conn, $_SESSION['user_id'], 'ACCESS_USER_MANAGEMENT');
+}
+
+// Check for session messages from status toggle
+if (isset($_SESSION['success'])) {
+    $success = $_SESSION['success'];
+    unset($_SESSION['success']);
+}
+if (isset($_SESSION['error'])) {
+    $error = $_SESSION['error'];
+    unset($_SESSION['error']);
 }
 ?>
 <!DOCTYPE html>
@@ -916,6 +1034,7 @@ if ($_SESSION['role'] === 'admin') {
     .action-cell {
       display: flex;
       gap: 8px;
+      flex-wrap: wrap;
     }
 
     .action-btn {
@@ -929,6 +1048,7 @@ if ($_SESSION['role'] === 'admin') {
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      white-space: nowrap;
     }
 
     .action-btn.primary {
@@ -947,6 +1067,12 @@ if ($_SESSION['role'] === 'admin') {
       background: rgba(230, 57, 70, 0.1);
       color: var(--danger);
       border: 1px solid rgba(230, 57, 70, 0.2);
+    }
+
+    .action-btn.warning {
+      background: rgba(245, 158, 11, 0.1);
+      color: var(--warning);
+      border: 1px solid rgba(245, 158, 11, 0.2);
     }
 
     .action-btn:hover {
@@ -969,6 +1095,30 @@ if ($_SESSION['role'] === 'admin') {
       color: white;
     }
 
+    .action-btn.warning:hover {
+      background: var(--warning);
+      color: white;
+    }
+
+    /* Style for form buttons inside action-cell */
+    .action-cell form {
+      display: inline;
+    }
+
+    .action-cell button[type="submit"] {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
     /* Role Badges */
     .role-badge {
       padding: 6px 12px;
@@ -988,6 +1138,27 @@ if ($_SESSION['role'] === 'admin') {
       background: rgba(245, 158, 11, 0.1);
       color: var(--warning);
       border: 1px solid rgba(245, 158, 11, 0.2);
+    }
+
+    /* Status Badges */
+    .status-badge {
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .status-active {
+      background: rgba(16, 185, 129, 0.1);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .status-inactive {
+      background: rgba(107, 114, 128, 0.1);
+      color: var(--gray);
+      border: 1px solid rgba(107, 114, 128, 0.2);
     }
 
     /* Flash Message */
@@ -1706,11 +1877,23 @@ if ($_SESSION['role'] === 'admin') {
       <div class="stat-card success">
         <div class="stat-header">
           <div>
-            <div class="stat-value"><?php echo $totalAdmins; ?></div>
-            <div class="stat-label">Admin Accounts</div>
+            <div class="stat-value"><?php echo $activeUsers; ?></div>
+            <div class="stat-label">Active Accounts</div>
           </div>
           <div class="stat-icon">
-            <i class="fas fa-user-shield"></i>
+            <i class="fas fa-user-check"></i>
+          </div>
+        </div>
+      </div>
+
+      <div class="stat-card danger">
+        <div class="stat-header">
+          <div>
+            <div class="stat-value"><?php echo $inactiveUsers; ?></div>
+            <div class="stat-label">Inactive Accounts</div>
+          </div>
+          <div class="stat-icon">
+            <i class="fas fa-user-slash"></i>
           </div>
         </div>
       </div>
@@ -1719,7 +1902,7 @@ if ($_SESSION['role'] === 'admin') {
         <div class="stat-header">
           <div>
             <div class="stat-value"><?php echo $totalPhotographers; ?></div>
-            <div class="stat-label">Photographer Accounts</div>
+            <div class="stat-label">Photographers</div>
           </div>
           <div class="stat-icon">
             <i class="fas fa-camera"></i>
@@ -1782,6 +1965,7 @@ if ($_SESSION['role'] === 'admin') {
               <th>Full Name</th>
               <th>Username</th>
               <th>Role</th>
+              <th>Status</th>
               <th>Created At</th>
               <th>Actions</th>
             </tr>
@@ -1789,7 +1973,7 @@ if ($_SESSION['role'] === 'admin') {
           <tbody>
             <?php if (empty($users)): ?>
               <tr>
-                <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 40px;">
+                <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 40px;">
                   <i class="fas fa-users" style="font-size: 48px; margin-bottom: 16px; display: block;"></i>
                   No staff accounts found
                 </td>
@@ -1805,15 +1989,37 @@ if ($_SESSION['role'] === 'admin') {
                       <?= strtoupper($user['role']) ?>
                     </span>
                   </td>
+                  <td>
+                    <span class="status-badge <?= $user['status'] === 'active' ? 'status-active' : 'status-inactive' ?>">
+                      <?= $user['status'] === 'active' ? 'ACTIVE' : 'INACTIVE' ?>
+                    </span>
+                  </td>
                   <td><?= date('M j, Y g:i A', strtotime($user['created_at'])) ?></td>
                   <td class="action-cell">
-                    <button type="button" class="action-btn success" 
-                            onclick="openEditModal(<?= $user['id'] ?>, '<?= htmlspecialchars(addslashes($user['fullname'])) ?>', '<?= htmlspecialchars(addslashes($user['username'])) ?>', '<?= $user['role'] ?>')">
+                    <button type="button" class="action-btn success edit-user-btn" 
+                            data-id="<?= $user['id'] ?>"
+                            data-fullname="<?= htmlspecialchars($user['fullname']) ?>"
+                            data-username="<?= htmlspecialchars($user['username']) ?>"
+                            data-role="<?= $user['role'] ?>"
+                            data-status="<?= $user['status'] ?>">
                       <i class="fas fa-edit"></i> Edit
                     </button>
-                    <form method="POST" style="display: inline;" onsubmit="return confirmDelete('<?= htmlspecialchars(addslashes($user['fullname'])) ?>')">
+                    
+                    <!-- Status Toggle Button -->
+                    <form method="POST" style="display: inline;">
                       <input type="hidden" name="id" value="<?= $user['id'] ?>">
-                      <button type="submit" name="delete_user" class="action-btn danger">
+                      <input type="hidden" name="current_status" value="<?= $user['status'] ?>">
+                      <button type="submit" name="toggle_status" class="action-btn <?= $user['status'] === 'active' ? 'warning' : 'success' ?>" 
+                              onclick="return confirm('Are you sure you want to <?= $user['status'] === 'active' ? 'disable' : 'enable' ?> <?= htmlspecialchars($user['fullname']) ?>?')">
+                        <i class="fas fa-<?= $user['status'] === 'active' ? 'pause' : 'play' ?>"></i> 
+                        <?= $user['status'] === 'active' ? 'Disable' : 'Enable' ?>
+                      </button>
+                    </form>
+                    
+                    <form method="POST" style="display: inline;">
+                      <input type="hidden" name="id" value="<?= $user['id'] ?>">
+                      <button type="submit" name="delete_user" class="action-btn danger" 
+                              onclick="return confirm('Are you sure you want to delete <?= htmlspecialchars($user['fullname']) ?>? This action cannot be undone.')">
                         <i class="fas fa-trash"></i> Delete
                       </button>
                     </form>
@@ -1874,9 +2080,6 @@ if ($_SESSION['role'] === 'admin') {
                   <i class="fas fa-eye"></i>
                 </button>
               </div>
-              <div class="password-strength" id="passwordStrength">
-                <div class="password-strength-bar"></div>
-              </div>
               <div class="password-hint">
                 <i class="fas fa-info-circle"></i>
                 <span>Password must be at least 4 characters long</span>
@@ -1903,6 +2106,21 @@ if ($_SESSION['role'] === 'admin') {
               <input type="hidden" id="editRole" name="role" required>
             </div>
           </div>
+
+          <div class="form-section">
+            <div class="section-label"><i class="fas fa-user-check"></i> Account Status</div>
+            <div class="form-group-modal">
+              <label for="editStatus"><i class="fas fa-toggle-on"></i> Account Status</label>
+              <select id="editStatus" name="status" class="form-control">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              <div class="password-hint">
+                <i class="fas fa-info-circle"></i>
+                <span>Inactive users cannot login to the system</span>
+              </div>
+            </div>
+          </div>
         </form>
       </div>
       
@@ -1916,21 +2134,6 @@ if ($_SESSION['role'] === 'admin') {
       </div>
     </div>
   </div>
-
-  <!-- Toast Notification -->
-  <?php if (!empty($success)): ?>
-    <div class="toast toast-success" id="successToast">
-      <i class="fas fa-check-circle"></i>
-      <span><?php echo htmlspecialchars($success); ?></span>
-    </div>
-  <?php endif; ?>
-
-  <?php if (!empty($error)): ?>
-    <div class="toast toast-error" id="errorToast">
-      <i class="fas fa-exclamation-circle"></i>
-      <span><?php echo htmlspecialchars($error); ?></span>
-    </div>
-  <?php endif; ?>
 
   <script>
     // Mobile sidebar toggle
@@ -1950,11 +2153,71 @@ if ($_SESSION['role'] === 'admin') {
       });
     }
 
-    // Enhanced Edit Modal Functions
-    function openEditModal(id, fullname, username, role) {
+    // Edit button functionality - FIXED
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('Page loaded - initializing edit buttons');
+      
+      // Add event listeners to all edit buttons
+      const editButtons = document.querySelectorAll('.edit-user-btn');
+      console.log('Found edit buttons:', editButtons.length);
+      
+      editButtons.forEach(button => {
+        button.addEventListener('click', function() {
+          const id = this.getAttribute('data-id');
+          const fullname = this.getAttribute('data-fullname');
+          const username = this.getAttribute('data-username');
+          const role = this.getAttribute('data-role');
+          const status = this.getAttribute('data-status');
+          
+          console.log('Edit button clicked:', {id, fullname, username, role, status});
+          openEditModal(id, fullname, username, role, status);
+        });
+      });
+
+      // Role selection in modal
+      document.querySelectorAll('.role-option').forEach(option => {
+        option.addEventListener('click', function() {
+          document.querySelectorAll('.role-option').forEach(opt => {
+            opt.classList.remove('selected');
+          });
+          this.classList.add('selected');
+          document.getElementById('editRole').value = this.getAttribute('data-value');
+        });
+      });
+
+      // Password visibility toggle
+      document.getElementById('togglePassword').addEventListener('click', function() {
+        const passwordInput = document.getElementById('editPassword');
+        const icon = this.querySelector('i');
+        
+        if (passwordInput.type === 'password') {
+          passwordInput.type = 'text';
+          icon.classList.remove('fa-eye');
+          icon.classList.add('fa-eye-slash');
+        } else {
+          passwordInput.type = 'password';
+          icon.classList.remove('fa-eye-slash');
+          icon.classList.add('fa-eye');
+        }
+      });
+
+      // Close modal with Escape key
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          closeEditModal();
+        }
+      });
+    });
+
+    // Enhanced Edit Modal Functions - FIXED
+    function openEditModal(id, fullname, username, role, status) {
+      console.log('Opening edit modal with data:', {id, fullname, username, role, status});
+      
+      // Set form values
       document.getElementById('editUserId').value = id;
       document.getElementById('editFullname').value = fullname;
       document.getElementById('editUsername').value = username;
+      document.getElementById('editStatus').value = status;
       
       // Set the role using the role selector
       document.querySelectorAll('.role-option').forEach(option => {
@@ -1971,7 +2234,6 @@ if ($_SESSION['role'] === 'admin') {
       
       // Reset password field
       document.getElementById('editPassword').value = '';
-      updatePasswordStrength('');
       
       // Show modal with animation
       document.getElementById('editUserModal').classList.add('active');
@@ -1992,60 +2254,7 @@ if ($_SESSION['role'] === 'admin') {
       }
     });
 
-    // Role selection
-    document.querySelectorAll('.role-option').forEach(option => {
-      option.addEventListener('click', function() {
-        document.querySelectorAll('.role-option').forEach(opt => {
-          opt.classList.remove('selected');
-        });
-        this.classList.add('selected');
-        document.getElementById('editRole').value = this.getAttribute('data-value');
-      });
-    });
-
-    // Password visibility toggle
-    document.getElementById('togglePassword').addEventListener('click', function() {
-      const passwordInput = document.getElementById('editPassword');
-      const icon = this.querySelector('i');
-      
-      if (passwordInput.type === 'password') {
-        passwordInput.type = 'text';
-        icon.classList.remove('fa-eye');
-        icon.classList.add('fa-eye-slash');
-      } else {
-        passwordInput.type = 'password';
-        icon.classList.remove('fa-eye-slash');
-        icon.classList.add('fa-eye');
-      }
-    });
-
-    // Password strength indicator
-    function updatePasswordStrength(password) {
-      const strengthBar = document.getElementById('passwordStrength');
-      const strengthClasses = ['weak', 'medium', 'strong'];
-      
-      // Remove all strength classes
-      strengthClasses.forEach(cls => strengthBar.classList.remove(cls));
-      
-      if (password.length === 0) {
-        return;
-      }
-      
-      if (password.length < 4) {
-        strengthBar.classList.add('weak');
-      } else if (password.length < 8) {
-        strengthBar.classList.add('medium');
-      } else {
-        strengthBar.classList.add('strong');
-      }
-    }
-
-    // Listen for password input changes
-    document.getElementById('editPassword').addEventListener('input', function() {
-      updatePasswordStrength(this.value);
-    });
-
-    // Enhanced form validation for modal
+    // Form validation for modal
     document.getElementById('editUserForm').addEventListener('submit', function(e) {
       const fullname = document.getElementById('editFullname').value.trim();
       const username = document.getElementById('editUsername').value.trim();
@@ -2055,13 +2264,13 @@ if ($_SESSION['role'] === 'admin') {
       // Validate required fields
       if (!fullname) {
         e.preventDefault();
-        highlightInvalidField(document.getElementById('editFullname'), 'Full name is required');
+        alert('Full name is required');
         return;
       }
       
       if (!username) {
         e.preventDefault();
-        highlightInvalidField(document.getElementById('editUsername'), 'Username is required');
+        alert('Username is required');
         return;
       }
       
@@ -2073,38 +2282,10 @@ if ($_SESSION['role'] === 'admin') {
       
       if (password && password.length < 4) {
         e.preventDefault();
-        highlightInvalidField(document.getElementById('editPassword'), 'Password must be at least 4 characters');
+        alert('Password must be at least 4 characters');
         return;
       }
-      
-      // Show loading state
-      const submitBtn = this.querySelector('button[type="submit"]');
-      if (submitBtn) {
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
-        submitBtn.disabled = true;
-      }
     });
-
-    function highlightInvalidField(field, message) {
-      field.style.borderColor = 'var(--danger)';
-      field.focus();
-      
-      // Create and show a temporary error message
-      const errorDiv = document.createElement('div');
-      errorDiv.className = 'flash-message flash-error';
-      errorDiv.style.marginTop = '10px';
-      errorDiv.style.marginBottom = '0';
-      errorDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${message}`;
-      
-      // Insert after the field
-      field.parentNode.appendChild(errorDiv);
-      
-      // Remove after 3 seconds
-      setTimeout(() => {
-        errorDiv.remove();
-        field.style.borderColor = '';
-      }, 3000);
-    }
 
     // Update current date and time
     function updateDateTime() {
@@ -2127,37 +2308,6 @@ if ($_SESSION['role'] === 'admin') {
         setTimeout(() => msg.remove(), 500);
       });
     }, 5000);
-
-    // Auto-hide toast notifications
-    setTimeout(function() {
-      const toasts = document.querySelectorAll('.toast');
-      toasts.forEach(toast => {
-        toast.style.animation = 'slideOutRight 0.5s ease-out forwards';
-        setTimeout(() => toast.remove(), 500);
-      });
-    }, 5000);
-
-    // Enhanced delete confirmation
-    function confirmDelete(userName) {
-      return confirm(`Are you sure you want to delete "${userName}"? This action cannot be undone.`);
-    }
-
-    // Clear form after successful submission
-    <?php if ($success): ?>
-      document.addEventListener('DOMContentLoaded', function() {
-        const addForm = document.getElementById('addUserForm');
-        if (addForm) {
-          addForm.reset();
-        }
-      });
-    <?php endif; ?>
-
-    // Close modal with Escape key
-    document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') {
-        closeEditModal();
-      }
-    });
   </script>
 </body>
 </html>

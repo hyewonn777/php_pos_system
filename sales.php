@@ -503,13 +503,14 @@ if (isset($_POST['update_order']) && isset($_POST['order_id'])) {
 }
 
 /* ----------------- SALES DATA ----------------- */
+// Modified query to get grouped sales data
 $salesQuery = "
     SELECT s.id, s.product, s.quantity, s.total, s.sale_date, s.order_type, 
            s.customer_name, s.customer_phone, s.payment_method, s.order_id,
            COALESCE(NULL, CONCAT('SALE-', s.id, '-', DATE_FORMAT(s.sale_date, '%Y%m%d'))) as reference_id,
            'completed' as order_status
     FROM sales s 
-    ORDER BY s.sale_date DESC
+    ORDER BY s.customer_name, s.sale_date DESC
 ";
 
 $result = $conn->query($salesQuery);
@@ -519,7 +520,7 @@ if ($result === false) {
     // If query fails, try an even simpler version
     error_log("Sales query failed: " . $conn->error);
     
-    $salesQuery = "SELECT id, product, quantity, total, sale_date, order_type, customer_name, customer_phone, payment_method FROM sales ORDER BY sale_date DESC";
+    $salesQuery = "SELECT id, product, quantity, total, sale_date, order_type, customer_name, customer_phone, payment_method FROM sales ORDER BY customer_name, sale_date DESC";
     $result = $conn->query($salesQuery);
     
     if ($result === false) {
@@ -541,6 +542,37 @@ if ($result === false) {
     while ($row = $result->fetch_assoc()) {
         $sales[] = $row;
     }
+}
+
+// Group sales by customer and date for better reporting
+$groupedSales = [];
+foreach ($sales as $sale) {
+    $dateKey = date('Y-m-d', strtotime($sale['sale_date']));
+    $customerKey = $sale['customer_name'] ?: 'Unknown Customer';
+    $key = $customerKey . '_' . $dateKey;
+    
+    if (!isset($groupedSales[$key])) {
+        $groupedSales[$key] = [
+            'customer_name' => $customerKey,
+            'sale_date' => $sale['sale_date'],
+            'order_type' => $sale['order_type'],
+            'customer_phone' => $sale['customer_phone'],
+            'payment_method' => $sale['payment_method'],
+            'items' => [],
+            'total_quantity' => 0,
+            'total_amount' => 0
+        ];
+    }
+    
+    $groupedSales[$key]['items'][] = [
+        'product' => $sale['product'],
+        'quantity' => $sale['quantity'],
+        'total' => $sale['total'],
+        'id' => $sale['id']
+    ];
+    
+    $groupedSales[$key]['total_quantity'] += $sale['quantity'];
+    $groupedSales[$key]['total_amount'] += $sale['total'];
 }
 
 // Initialize variables to prevent undefined variable errors
@@ -935,6 +967,123 @@ if ($result && $result->num_rows > 0) {
         z-index: 1000;
     }
 
+    /* Grouped sales rows */
+    .grouped-sale-row {
+        background: rgba(67, 97, 238, 0.05) !important;
+        border-left: 4px solid var(--primary);
+        font-weight: 600;
+    }
+
+    .grouped-sale-row:hover {
+        background: rgba(67, 97, 238, 0.08) !important;
+    }
+
+    .grouped-items {
+        background: rgba(0, 0, 0, 0.02);
+    }
+
+    .dark-mode .grouped-items {
+        background: rgba(255, 255, 255, 0.03);
+    }
+
+    .grouped-item-row {
+        border-left: 2px solid var(--border);
+    }
+
+    .group-toggle {
+        cursor: pointer;
+        transition: var(--transition);
+    }
+
+    .group-toggle:hover {
+        color: var(--primary);
+    }
+
+    .group-indicator {
+        display: inline-block;
+        width: 16px;
+        text-align: center;
+        margin-right: 8px;
+        transition: var(--transition);
+    }
+
+    .group-expanded .group-indicator {
+        transform: rotate(90deg);
+    }
+
+    .grouped-details {
+        display: none;
+    }
+
+    .group-expanded + .grouped-details {
+        display: table-row-group;
+    }
+
+    /* Enhanced Action Buttons */
+    .action-cell {
+        display: flex;
+        gap: 6px;
+        flex-wrap: nowrap;
+        align-items: center;
+        justify-content: center;
+        white-space: nowrap;
+    }
+
+    .action-btn {
+        padding: 6px 10px;
+        font-size: 11px;
+        min-width: 60px;
+        justify-content: center;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: var(--transition);
+        font-weight: 600;
+    }
+
+    .action-btn.edit {
+        background: linear-gradient(135deg, var(--warning) 0%, #d97706 100%);
+        color: white;
+    }
+
+    .action-btn.edit:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3);
+    }
+
+    .action-btn.delete {
+        background: linear-gradient(135deg, var(--danger) 0%, #c53030 100%);
+        color: white;
+    }
+
+    .action-btn.delete:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(230, 57, 70, 0.3);
+    }
+
+    .action-btn.view {
+        background: linear-gradient(135deg, var(--info) 0%, #3a7bd5 100%);
+        color: white;
+    }
+
+    .action-btn.view:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(72, 149, 239, 0.3);
+    }
+
+    .action-btn.success {
+        background: linear-gradient(135deg, var(--success) 0%, #34d399 100%);
+        color: white;
+    }
+
+    .action-btn.success:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
+    }
+
     /* Existing sales.php styles remain the same */
     :root {
       --primary: #4361ee;
@@ -1274,87 +1423,38 @@ if ($result && $result->num_rows > 0) {
         color: var(--text-muted);
     }
 
-    /* Fixed Action Buttons Alignment - UPDATED */
-    .action-cell {
-        display: flex;
-        gap: 6px;
-        flex-wrap: nowrap;
-        align-items: center;
-        justify-content: center;
-        white-space: nowrap;
-        min-height: 60px;
-    }
-
-    /* Specific styling for sales table actions */
-    #sales-tab .action-cell {
-        flex-direction: row;
-        min-width: auto;
-    }
-
-    #sales-tab .action-btn {
-        padding: 6px 10px;
-        font-size: 11px;
-        min-width: 60px;
-        justify-content: center;
-    }
-
-    /* Specific styling for orders table actions */
-    #orders-tab .action-cell {
-        flex-direction: column;
-        min-width: 120px;
-        gap: 4px;
-    }
-
-    #orders-tab .action-btn {
-        width: 100%;
-        justify-content: center;
-        padding: 6px 8px;
-        font-size: 11px;
-        min-width: auto;
-    }
-
-    /* Ensure buttons are properly aligned in forms */
-    .action-cell form {
-        margin: 0;
-        display: flex;
-    }
-
-    .action-cell .action-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 4px;
-        white-space: nowrap;
-    }
-
-    /* Delete button style */
-    .action-btn.danger {
-        background: linear-gradient(135deg, var(--danger) 0%, #c53030 100%);
-        color: white;
-    }
-    
-    .action-btn.danger:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(230, 57, 70, 0.3);
-    }
-
     /* Fixed Order Type Badges - UPDATED */
     .order-type-physical {
         background: rgba(245, 158, 11, 0.1);
         color: var(--warning);
         border: 1px solid rgba(245, 158, 11, 0.2);
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        display: inline-block;
     }
 
     .order-type-website {
         background: rgba(16, 185, 129, 0.1);
         color: var(--success);
         border: 1px solid rgba(16, 185, 129, 0.2);
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        display: inline-block;
     }
 
     .order-type-online {
         background: rgba(67, 97, 238, 0.1);
         color: var(--primary);
         border: 1px solid rgba(67, 97, 238, 0.2);
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        display: inline-block;
     }
 
     /* Tabs */
@@ -1949,50 +2049,6 @@ if ($result && $result->num_rows > 0) {
       background: rgba(239, 68, 68, 0.1);
       color: var(--danger);
       border: 1px solid rgba(239, 68, 68, 0.2);
-    }
-
-    .action-btn {
-      padding: 8px 14px;
-      border-radius: 6px;
-      border: none;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 600;
-      transition: var(--transition);
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      white-space: nowrap;
-    }
-
-    .action-btn.success {
-      background: linear-gradient(135deg, var(--success) 0%, #0d9c6d 100%);
-      color: white;
-    }
-
-    .action-btn.success:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
-    }
-
-    .action-btn.warning {
-      background: linear-gradient(135deg, var(--warning) 0%, #d97706 100%);
-      color: white;
-    }
-
-    .action-btn.warning:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3);
-    }
-
-    .action-btn.info {
-      background: linear-gradient(135deg, var(--info) 0%, #3a7bd5 100%);
-      color: white;
-    }
-
-    .action-btn.info:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 8px rgba(72, 149, 239, 0.3);
     }
 
     .action-btn:disabled {
@@ -2674,6 +2730,171 @@ if ($result && $result->num_rows > 0) {
     </div>
   </div>
 
+  <!-- Purchase Order Report Modal -->
+  <div class="modal-overlay" id="purchaseOrderModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Purchase Order Report</h3>
+        <button class="modal-close" id="closePurchaseOrderModal">&times;</button>
+      </div>
+      
+      <div class="sales-report-content">
+        <div id="purchaseOrderReportPrint">
+          <!-- Report Header -->
+          <div class="report-header">
+            <div class="report-company">MARCOMEDIA STUDIO</div>
+            <div class="report-title">PURCHASE ORDER REPORT</div>
+            <div style="color: var(--text-muted); font-size: 14px;" id="purchaseOrderGeneratedDate">
+              Generated on: <?php echo date('F j, Y g:i A'); ?>
+            </div>
+          </div>
+
+          <!-- Order Information -->
+          <div class="report-meta">
+            <div>
+              <div class="meta-item">
+                <span class="meta-label">Order Reference:</span>
+                <span class="meta-value" id="poReferenceId"></span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Order Date:</span>
+                <span class="meta-value" id="poOrderDate"></span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Order Type:</span>
+                <span class="meta-value" id="poOrderType"></span>
+              </div>
+            </div>
+            <div>
+              <div class="meta-item">
+                <span class="meta-label">Status:</span>
+                <span class="meta-value" id="poStatus"></span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Processed By:</span>
+                <span class="meta-value"><?php echo $username; ?></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Customer Information -->
+          <div class="report-section">
+            <div class="section-title">CUSTOMER INFORMATION</div>
+            <div class="report-meta">
+              <div>
+                <div class="meta-item">
+                  <span class="meta-label">Customer Name:</span>
+                  <span class="meta-value" id="poCustomer"></span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-label">Email:</span>
+                  <span class="meta-value" id="poEmail"></span>
+                </div>
+              </div>
+              <div>
+                <div class="meta-item">
+                  <span class="meta-label">Phone:</span>
+                  <span class="meta-value" id="poPhone"></span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-label">Address:</span>
+                  <span class="meta-value" id="poAddress"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Order Items -->
+          <div class="report-section">
+            <div class="section-title">ORDER ITEMS</div>
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th>Product</th>
+                  <th>Quantity</th>
+                  <th>Unit Price</th>
+                  <th>Subtotal</th>
+                </tr>
+              </thead>
+              <tbody id="poItems">
+                <!-- Items will be populated here -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Order Summary -->
+          <div class="report-section">
+            <div class="section-title">ORDER SUMMARY</div>
+            <div class="summary-grid">
+              <div class="summary-card">
+                <div class="summary-value" id="poSubtotal">₱0.00</div>
+                <div class="summary-label">Subtotal</div>
+              </div>
+              <div class="summary-card info">
+                <div class="summary-value" id="poTax">₱0.00</div>
+                <div class="summary-label">Tax (12%)</div>
+              </div>
+              <div class="summary-card warning">
+                <div class="summary-value" id="poShipping">₱0.00</div>
+                <div class="summary-label">Shipping</div>
+              </div>
+              <div class="summary-card success">
+                <div class="summary-value" id="poGrandTotal">₱0.00</div>
+                <div class="summary-label">Grand Total</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Additional Information -->
+          <div class="report-section">
+            <div class="section-title">ORDER TRACKING</div>
+            <div class="report-meta">
+              <div>
+                <div class="meta-item">
+                  <span class="meta-label">Order Created:</span>
+                  <span class="meta-value" id="poCreated"></span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-label">Last Updated:</span>
+                  <span class="meta-value" id="poUpdated"></span>
+                </div>
+              </div>
+              <div>
+                <div class="meta-item">
+                  <span class="meta-label">Estimated Delivery:</span>
+                  <span class="meta-value" id="poDelivery"></span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-label">Tracking Number:</span>
+                  <span class="meta-value" id="poTracking"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Report Footer -->
+          <div class="report-footer">
+            <p>This is an computer-generated report. No signature is required.</p>
+            <p>Marcomedia Studio • contact@marcomedia.com • (123) 456-7890</p>
+          </div>
+        </div>
+
+        <!-- Print Actions -->
+        <div class="print-actions no-print">
+          <button type="button" class="btn btn-primary" onclick="printPurchaseOrderReport()">
+            <i class="fas fa-print"></i> Print Report
+          </button>
+          <button type="button" class="btn btn-success" onclick="downloadPurchaseOrderReport()">
+            <i class="fas fa-download"></i> Download PDF
+          </button>
+          <button type="button" class="btn btn-secondary modal-close">
+            <i class="fas fa-times"></i> Close
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 <!-- Sidebar -->
 <div class="sidebar" id="sidebar">
     <div class="sidebar-header">
@@ -2736,12 +2957,7 @@ if ($result && $result->num_rows > 0) {
           <div class="menu-toggle" id="menuToggle">
             <i class="fas fa-bars"></i>
           </div>
-          <button class="action-btn-refresh" onclick="manualRefresh()" id="refreshBtn" style="background: var(--card-bg); border: 1px solid var(--border);">
-            <div class="action-icon">
-              <i class="fas fa-sync-alt"></i>
-            </div>
-            <div class="action-text">Refresh</div>
-          </button>
+          <!-- REMOVED: Refresh button next to dark mode toggle -->
           <label class="theme-toggle" for="theme-toggle">
             <i class="fas fa-moon"></i>
           </label>
@@ -2921,7 +3137,7 @@ if ($result && $result->num_rows > 0) {
           </div>
         </div>
 
-        <!-- Sales Table with Reordered Columns -->
+        <!-- Sales Table with Grouped Items -->
         <div class="table-container">
           <div class="section-header">
             <div class="section-title">Sales Records</div>
@@ -2961,83 +3177,96 @@ if ($result && $result->num_rows > 0) {
                 </tr>
               </thead>
               <tbody>
-                <?php foreach($sales as $row): 
-                  $customerDisplay = 'N/A';
-                  $customerEmail = '';
-                  $isEditable = (isset($row['order_status']) && $row['order_status'] === 'Pending') || (isset($row['order_type']) && $row['order_type'] === 'physical');
-                  
-                  if (isset($row['order_type']) && $row['order_type'] === 'physical') {
-                      if (!empty($row['customer_name'])) {
-                          $customerDisplay = htmlspecialchars($row['customer_name']);
-                          if (!empty($row['customer_phone'])) {
-                              $customerEmail = $row['customer_phone'];
-                          }
-                      }
-                  } else {
-                      if (!empty($row['customer_name'])) {
-                          $customerDisplay = htmlspecialchars($row['customer_name']);
-                          if (!empty($row['customer_phone'])) {
-                              $customerEmail = $row['customer_phone'];
-                          }
-                      }
-                  }
+                <?php 
+                $groupIndex = 0;
+                foreach($groupedSales as $groupKey => $group): 
+                  $groupIndex++;
+                  $isEditable = true; // You can add logic to determine if group is editable
                 ?>
-                <tr class="clickable-row" onclick="showDetailedSalesReport(<?= htmlspecialchars(json_encode($row)) ?>)">
+                <!-- Group Header Row -->
+                <tr class="grouped-sale-row clickable-row" onclick="toggleGroup(<?= $groupIndex ?>)" id="groupHeader<?= $groupIndex ?>">
                   <td class="checkbox-cell" onclick="event.stopPropagation();">
-                    <input type="checkbox" name="selected_sales[]" value="<?= $row['id'] ?>">
+                    <input type="checkbox" name="selected_sales[]" value="<?= $groupKey ?>" class="group-checkbox">
                   </td>
-                  <td>
-                    <span class="reference-id"><?= isset($row['reference_id']) ? $row['reference_id'] : 'SALE-' . $row['id'] ?></span>
-                  </td>
-                  <td>
-                    <div class="customer-info">
-                      <div class="customer-name"><?= $customerDisplay ?></div>
-                      <?php if (!empty($customerEmail)): ?>
-                        <div class="customer-details"><?= $customerEmail ?></div>
-                      <?php endif; ?>
+                  <td colspan="2">
+                    <div class="group-toggle">
+                      <span class="group-indicator">▶</span>
+                      <strong><?= htmlspecialchars($group['customer_name']) ?></strong>
+                      <small style="color: var(--text-muted); margin-left: 10px;">
+                        <?= date('M j, Y', strtotime($group['sale_date'])) ?>
+                      </small>
                     </div>
                   </td>
                   <td>
-                    <span class="order-type-badge order-type-<?= isset($row['order_type']) ? $row['order_type'] : 'online' ?>">
-                      <?= isset($row['order_type']) ? ucfirst($row['order_type']) : 'Online' ?>
+                    <span class="order-type-badge order-type-<?= $group['order_type'] ?>">
+                      <?= ucfirst($group['order_type']) ?>
                     </span>
                   </td>
-                  <td><?= htmlspecialchars($row['product']) ?></td>
                   <td>
-                    <input type="number" class="qty-input" name="quantity[<?= $row['id'] ?>]" 
-                           value="<?= $row['quantity'] ?>" min="1" <?= $isEditable ? '' : 'disabled' ?>>
+                    <em><?= count($group['items']) ?> item(s)</em>
                   </td>
-                  <td>
-                    <input type="number" class="total-input" name="total[<?= $row['id'] ?>]" 
-                           value="<?= $row['total'] ?>" min="0" step="0.01" <?= $isEditable ? '' : 'disabled' ?>>
-                  </td>
+                  <td><strong><?= $group['total_quantity'] ?></strong></td>
+                  <td><strong>₱<?= number_format($group['total_amount'], 2) ?></strong></td>
                   <td onclick="event.stopPropagation();">
                     <div class="action-cell">
-                      <?php if ($isEditable): ?>
-                        <!-- Update form -->
-                        <form method="POST" onsubmit="return confirm('Are you sure you want to update this sale?');" style="display: flex;">
-                          <input type="hidden" name="sale_id" value="<?= $row['id'] ?>">
-                          <input type="hidden" name="quantity" value="<?= $row['quantity'] ?>">
-                          <input type="hidden" name="total" value="<?= $row['total'] ?>">
-                          <button type="submit" name="update_sale" class="action-btn success">
-                            <i class="fas fa-save"></i> Save
-                          </button>
-                        </form>
-                        <!-- Delete form -->
-                        <form method="POST" onsubmit="return confirm('Are you sure you want to delete this sale?');" style="display: flex;">
-                          <input type="hidden" name="sale_id" value="<?= $row['id'] ?>">
-                          <button type="submit" name="delete_sale" class="action-btn danger">
-                            <i class="fas fa-trash"></i> Delete
-                          </button>
-                        </form>
-                      <?php else: ?>
-                        <span style="color: var(--text-muted); font-size: 12px; padding: 8px 12px;">Completed</span>
-                      <?php endif; ?>
+                      <button type="button" class="action-btn view" onclick="event.stopPropagation(); showGroupedSalesReport('<?= $groupKey ?>', <?= htmlspecialchars(json_encode($group), ENT_QUOTES) ?>)">
+                        <i class="fas fa-eye"></i> View
+                      </button>
                     </div>
                   </td>
                 </tr>
+                
+                <!-- Group Details Rows -->
+                <tbody class="grouped-details" id="groupDetails<?= $groupIndex ?>">
+                  <?php foreach($group['items'] as $item): ?>
+                  <tr class="grouped-item-row">
+                    <td class="checkbox-cell">
+                      <input type="checkbox" name="selected_sales[]" value="<?= $item['id'] ?>">
+                    </td>
+                    <td>
+                      <span class="reference-id">SALE-<?= $item['id'] ?></span>
+                    </td>
+                    <td></td> <!-- Empty customer cell since it's in group header -->
+                    <td></td> <!-- Empty order type cell -->
+                    <td><?= htmlspecialchars($item['product']) ?></td>
+                    <td>
+                      <input type="number" class="qty-input" name="quantity[<?= $item['id'] ?>]" 
+                             value="<?= $item['quantity'] ?>" min="1" <?= $isEditable ? '' : 'disabled' ?>>
+                    </td>
+                    <td>
+                      <input type="number" class="total-input" name="total[<?= $item['id'] ?>]" 
+                             value="<?= $item['total'] ?>" min="0" step="0.01" <?= $isEditable ? '' : 'disabled' ?>>
+                    </td>
+                    <td onclick="event.stopPropagation();">
+                      <div class="action-cell">
+                        <?php if ($isEditable): ?>
+                          <!-- Update form -->
+                          <form method="POST" onsubmit="return confirm('Are you sure you want to update this sale?');" style="display: flex;">
+                            <input type="hidden" name="sale_id" value="<?= $item['id'] ?>">
+                            <input type="hidden" name="quantity" value="<?= $item['quantity'] ?>">
+                            <input type="hidden" name="total" value="<?= $item['total'] ?>">
+                            <button type="submit" name="update_sale" class="action-btn edit">
+                              <i class="fas fa-edit"></i> Edit
+                            </button>
+                          </form>
+                          <!-- Delete form -->
+                          <form method="POST" onsubmit="return confirm('Are you sure you want to delete this sale?');" style="display: flex;">
+                            <input type="hidden" name="sale_id" value="<?= $item['id'] ?>">
+                            <button type="submit" name="delete_sale" class="action-btn delete">
+                              <i class="fas fa-trash"></i> Delete
+                            </button>
+                          </form>
+                        <?php else: ?>
+                          <span style="color: var(--text-muted); font-size: 12px; padding: 8px 12px;">Completed</span>
+                        <?php endif; ?>
+                      </div>
+                    </td>
+                  </tr>
+                  <?php endforeach; ?>
+                </tbody>
                 <?php endforeach; ?>
-                <?php if (empty($sales)): ?>
+                
+                <?php if (empty($groupedSales)): ?>
                   <tr>
                     <td colspan="8" style="text-align: center; padding: 40px;">
                       <i class="fas fa-inbox" style="font-size: 48px; color: var(--text-muted); margin-bottom: 15px; display: block;"></i>
@@ -3220,26 +3449,44 @@ if ($result && $result->num_rows > 0) {
                         <div style="font-weight: 600;"><?= date('M j, Y', strtotime($order['created_at'])); ?></div>
                         <small style="color: var(--text-muted);"><?= date('g:i A', strtotime($order['created_at'])); ?></small>
                       </td>
-                      <td class="action-cell">
-                        <?php if ($order['status'] === 'Pending' || $order['status'] === 'Confirmed'): ?>
-                          <button type="button" class="action-btn warning" onclick="editOrder(<?= $order['id']; ?>)">
-                            <i class="fas fa-edit"></i> Edit
-                          </button>
-                          <button type="button" class="action-btn success" onclick="confirmOrder(<?= $order['id']; ?>)">
-                            <i class="fas fa-check"></i> Confirm
-                          </button>
-                          <button type="button" class="action-btn info" onclick="receiveOrder(<?= $order['id']; ?>)">
-                            <i class="fas fa-truck"></i> Receive
-                          </button>
-                        <?php elseif ($order['status'] === 'Received'): ?>
-                          <span style="color: var(--success); font-weight: 600;">
-                            <i class="fas fa-check-circle"></i> Received
-                          </span>
-                        <?php elseif ($order['status'] === 'Cancelled'): ?>
-                          <span style="color: var(--danger); font-weight: 600;">
-                            <i class="fas fa-times-circle"></i> Cancelled
-                          </span>
-                        <?php endif; ?>
+                      <td>
+                        <div class="action-cell">
+                          <?php if ($order['status'] === 'Pending'): ?>
+                            <button type="button" class="action-btn edit" onclick="editOrder(<?= $order['id']; ?>)">
+                              <i class="fas fa-edit"></i> Edit
+                            </button>
+                            <button type="button" class="action-btn success" onclick="confirmOrder(<?= $order['id']; ?>)">
+                              <i class="fas fa-check"></i> Confirm
+                            </button>
+                            <button type="button" class="action-btn view" onclick="showPurchaseOrderReport(<?= $order['id']; ?>, <?= htmlspecialchars(json_encode($order), ENT_QUOTES) ?>)">
+                              <i class="fas fa-eye"></i> View
+                            </button>
+                          <?php elseif ($order['status'] === 'Confirmed'): ?>
+                            <button type="button" class="action-btn edit" onclick="editOrder(<?= $order['id']; ?>)">
+                              <i class="fas fa-edit"></i> Edit
+                            </button>
+                            <button type="button" class="action-btn success" onclick="receiveOrder(<?= $order['id']; ?>)">
+                              <i class="fas fa-truck"></i> Receive
+                            </button>
+                            <button type="button" class="action-btn view" onclick="showPurchaseOrderReport(<?= $order['id']; ?>, <?= htmlspecialchars(json_encode($order), ENT_QUOTES) ?>)">
+                              <i class="fas fa-eye"></i> View
+                            </button>
+                          <?php elseif ($order['status'] === 'Received'): ?>
+                            <button type="button" class="action-btn view" onclick="showPurchaseOrderReport(<?= $order['id']; ?>, <?= htmlspecialchars(json_encode($order), ENT_QUOTES) ?>)">
+                              <i class="fas fa-eye"></i> View
+                            </button>
+                            <span style="color: var(--success); font-weight: 600;">
+                              <i class="fas fa-check-circle"></i> Received
+                            </span>
+                          <?php elseif ($order['status'] === 'Cancelled'): ?>
+                            <button type="button" class="action-btn view" onclick="showPurchaseOrderReport(<?= $order['id']; ?>, <?= htmlspecialchars(json_encode($order), ENT_QUOTES) ?>)">
+                              <i class="fas fa-eye"></i> View
+                            </button>
+                            <span style="color: var(--danger); font-weight: 600;">
+                              <i class="fas fa-times-circle"></i> Cancelled
+                            </span>
+                          <?php endif; ?>
+                        </div>
                       </td>
                     </tr>
                   <?php endforeach; ?>
@@ -3411,13 +3658,11 @@ if ($result && $result->num_rows > 0) {
 
     // Enhanced manual refresh function
     function manualRefresh() {
-        const refreshBtn = document.getElementById('refreshBtn');
         const refreshBtnMain = document.getElementById('refreshBtnMain');
-        const icon = refreshBtn ? refreshBtn.querySelector('i') : (refreshBtnMain ? refreshBtnMain.querySelector('i') : null);
+        const icon = refreshBtnMain ? refreshBtnMain.querySelector('i') : null;
         
         if (icon) {
             // Add refreshing animation
-            refreshBtn?.classList.add('refreshing');
             refreshBtnMain?.classList.add('refreshing');
             icon.className = 'fas fa-spinner';
         }
@@ -3431,7 +3676,6 @@ if ($result && $result->num_rows > 0) {
         
         // Remove animation after 2 seconds
         setTimeout(() => {
-            refreshBtn?.classList.remove('refreshing');
             refreshBtnMain?.classList.remove('refreshing');
             if (icon) {
                 icon.className = 'fas fa-sync-alt';
@@ -3720,6 +3964,15 @@ if ($result && $result->num_rows > 0) {
       });
     });
 
+    // Group toggle functionality
+    function toggleGroup(groupIndex) {
+      const groupHeader = document.getElementById('groupHeader' + groupIndex);
+      const groupDetails = document.getElementById('groupDetails' + groupIndex);
+      
+      groupHeader.classList.toggle('group-expanded');
+      groupDetails.style.display = groupDetails.style.display === 'table-row-group' ? 'none' : 'table-row-group';
+    }
+
     // Order actions
     function confirmOrder(orderId) {
       if (confirm('Confirm order #' + orderId + '?\n\nThis will push website orders to sales tracking.')) {
@@ -3779,12 +4032,12 @@ if ($result && $result->num_rows > 0) {
       }
     }
 
-    // Enhanced Sales Report functionality
-    function showDetailedSalesReport(saleData) {
+    // Enhanced Sales Report functionality for grouped sales
+    function showGroupedSalesReport(groupKey, groupData) {
       const modal = document.getElementById('salesReportModal');
       
-      // Calculate additional financial data
-      const subtotal = parseFloat(saleData.total) || 0;
+      // Calculate financial data for the entire group
+      const subtotal = groupData.total_amount || 0;
       const taxRate = 0.12; // 12% tax
       const taxAmount = subtotal * taxRate;
       const discountRate = 0.10; // 10% discount
@@ -3793,37 +4046,37 @@ if ($result && $result->num_rows > 0) {
       const profitMargin = 0.25; // 25% profit margin
       const estimatedProfit = grandTotal * profitMargin;
       
-      // Populate modal with detailed sale data
-      document.getElementById('reportReferenceId').textContent = saleData.reference_id || 'SALE-' + saleData.id;
-      document.getElementById('reportSaleDate').textContent = new Date(saleData.sale_date).toLocaleDateString('en-US', {
+      // Populate modal with grouped sale data
+      document.getElementById('reportReferenceId').textContent = 'GROUP-' + groupKey;
+      document.getElementById('reportSaleDate').textContent = new Date(groupData.sale_date).toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+        day: 'numeric'
       });
-      document.getElementById('reportOrderType').textContent = saleData.order_type ? 
-        saleData.order_type.charAt(0).toUpperCase() + saleData.order_type.slice(1) : 'Online';
-      document.getElementById('reportStatus').textContent = saleData.order_status ? 
-        saleData.order_status.charAt(0).toUpperCase() + saleData.order_status.slice(1) : 'Completed';
-      document.getElementById('reportPaymentMethod').textContent = saleData.payment_method || 'Cash';
-      document.getElementById('reportCustomer').textContent = saleData.customer_name || 'Walk-in Customer';
-      document.getElementById('reportContact').textContent = saleData.customer_phone || 'N/A';
-      document.getElementById('reportOrderRef').textContent = saleData.order_id ? 'ORD-' + saleData.order_id : 'Direct Sale';
-      document.getElementById('reportTransactionId').textContent = saleData.reference_id || 'SALE-' + saleData.id;
+      document.getElementById('reportOrderType').textContent = groupData.order_type ? 
+        groupData.order_type.charAt(0).toUpperCase() + groupData.order_type.slice(1) : 'Online';
+      document.getElementById('reportStatus').textContent = 'Completed';
+      document.getElementById('reportPaymentMethod').textContent = groupData.payment_method || 'Cash';
+      document.getElementById('reportCustomer').textContent = groupData.customer_name || 'Walk-in Customer';
+      document.getElementById('reportContact').textContent = groupData.customer_phone || 'N/A';
+      document.getElementById('reportOrderRef').textContent = 'GROUP-' + groupKey;
+      document.getElementById('reportTransactionId').textContent = 'GROUP-' + groupKey;
       
-      // Populate items table
+      // Populate items table with all items in the group
       const itemsContainer = document.getElementById('reportItems');
-      const unitPrice = saleData.quantity > 0 ? saleData.total / saleData.quantity : 0;
+      itemsContainer.innerHTML = '';
       
-      itemsContainer.innerHTML = `
-        <tr>
-          <td>${saleData.product}</td>
-          <td>${saleData.quantity}</td>
+      groupData.items.forEach(item => {
+        const unitPrice = item.quantity > 0 ? item.total / item.quantity : 0;
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${item.product}</td>
+          <td>${item.quantity}</td>
           <td>₱${unitPrice.toFixed(2)}</td>
-          <td>₱${parseFloat(saleData.total).toFixed(2)}</td>
-        </tr>
-      `;
+          <td>₱${parseFloat(item.total).toFixed(2)}</td>
+        `;
+        itemsContainer.appendChild(row);
+      });
       
       // Populate financial summary
       document.getElementById('reportSubtotal').textContent = '₱' + subtotal.toFixed(2);
@@ -3834,6 +4087,75 @@ if ($result && $result->num_rows > 0) {
       document.getElementById('reportEstimatedProfit').textContent = '₱' + estimatedProfit.toFixed(2);
       document.getElementById('reportPaymentStatus').textContent = 'Paid';
       document.getElementById('reportDeliveryStatus').textContent = 'Completed';
+      
+      modal.classList.add('active');
+    }
+
+    // Purchase Order Report functionality
+    function showPurchaseOrderReport(orderId, orderData) {
+      const modal = document.getElementById('purchaseOrderModal');
+      
+      // Calculate order totals
+      let subtotal = 0;
+      const items = <?php echo json_encode($order_items); ?>[orderId] || [];
+      
+      items.forEach(item => {
+        subtotal += item.quantity * item.price;
+      });
+      
+      const taxRate = 0.12; // 12% tax
+      const taxAmount = subtotal * taxRate;
+      const shipping = 50.00; // Fixed shipping cost
+      const grandTotal = subtotal + taxAmount + shipping;
+      
+      // Populate modal with order data
+      document.getElementById('poReferenceId').textContent = orderData.reference_id;
+      document.getElementById('poOrderDate').textContent = new Date(orderData.created_at).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      document.getElementById('poOrderType').textContent = orderData.order_type ? 
+        orderData.order_type.charAt(0).toUpperCase() + orderData.order_type.slice(1) : 'Online';
+      document.getElementById('poStatus').textContent = orderData.status;
+      document.getElementById('poCustomer').textContent = orderData.display_name || 'Unknown Customer';
+      document.getElementById('poEmail').textContent = orderData.customer_email || 'N/A';
+      document.getElementById('poPhone').textContent = orderData.customer_phone || 'N/A';
+      document.getElementById('poAddress').textContent = orderData.customer_address || 'N/A';
+      
+      // Populate order items
+      const itemsContainer = document.getElementById('poItems');
+      itemsContainer.innerHTML = '';
+      
+      items.forEach(item => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${item.name}</td>
+          <td>${item.quantity}</td>
+          <td>₱${parseFloat(item.price).toFixed(2)}</td>
+          <td>₱${(item.quantity * item.price).toFixed(2)}</td>
+        `;
+        itemsContainer.appendChild(row);
+      });
+      
+      // Populate order summary
+      document.getElementById('poSubtotal').textContent = '₱' + subtotal.toFixed(2);
+      document.getElementById('poTax').textContent = '₱' + taxAmount.toFixed(2);
+      document.getElementById('poShipping').textContent = '₱' + shipping.toFixed(2);
+      document.getElementById('poGrandTotal').textContent = '₱' + grandTotal.toFixed(2);
+      
+      // Populate tracking information
+      document.getElementById('poCreated').textContent = new Date(orderData.created_at).toLocaleDateString();
+      document.getElementById('poUpdated').textContent = new Date(orderData.updated_at || orderData.created_at).toLocaleDateString();
+      
+      // Calculate estimated delivery (3 days from order date)
+      const deliveryDate = new Date(orderData.created_at);
+      deliveryDate.setDate(deliveryDate.getDate() + 3);
+      document.getElementById('poDelivery').textContent = deliveryDate.toLocaleDateString();
+      
+      document.getElementById('poTracking').textContent = 'TRK-' + orderData.reference_id;
       
       modal.classList.add('active');
     }
@@ -3849,10 +4171,25 @@ if ($result && $result->num_rows > 0) {
       location.reload();
     }
 
+    // Print purchase order report
+    function printPurchaseOrderReport() {
+      const printContent = document.getElementById('purchaseOrderReportPrint');
+      const originalContents = document.body.innerHTML;
+      
+      document.body.innerHTML = printContent.innerHTML;
+      window.print();
+      document.body.innerHTML = originalContents;
+      location.reload();
+    }
+
     // Download sales report as PDF (simplified version)
     function downloadSalesReport() {
       alert('PDF download functionality would be implemented here. For now, please use the print feature and save as PDF.');
-      // In a real implementation, you would use a library like jsPDF or html2pdf.js
+    }
+
+    // Download purchase order report as PDF
+    function downloadPurchaseOrderReport() {
+      alert('PDF download functionality would be implemented here. For now, please use the print feature and save as PDF.');
     }
 
     function filterOrders(status) {
